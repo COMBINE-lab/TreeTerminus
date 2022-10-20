@@ -820,11 +820,11 @@ fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
 // files.
 
 fn main() -> io::Result<()> {
-    let matches = App::new("Terminus")
+    let matches = App::new("TreeTerminus")
 	.setting(AppSettings::ArgRequiredElseHelp)
-        .version("0.1.53")
-        .author("Sarkar et al.")
-        .about("Data-driven grouping of transcripts to reduce inferential uncertainty")
+        .version("0.1.0")
+        .author("Singh et al.")
+        // .about("Data-driven grouping of transcripts to reduce inferential uncertainty")
         .subcommand(
             SubCommand::with_name("group")
             .about("perform per-sample grouping of transcripts; required prior to consensus collapse.")
@@ -915,8 +915,8 @@ fn main() -> io::Result<()> {
             )
         )
         .subcommand(
-            SubCommand::with_name("collapse")
-            .about("analyze a collection of per-sample groups, and produce a consensus grouping.")
+            SubCommand::with_name("consensus")
+            .about("Produce a set of consensus trees from the individual per-sample trees obtained for an RNA-Seq experiment after running the group step.")
             .arg(
                 Arg::with_name("dirs")
                     .long("dirs")
@@ -982,7 +982,7 @@ fn main() -> io::Result<()> {
         ("group", Some(sub_m)) => {
             do_group(&sub_m).expect("Grouping failed");
         }
-        ("collapse", Some(sub_m)) => {
+        ("consensus", Some(sub_m)) => {
             do_collapse(&sub_m).expect("Grouping failed");
         }
         _ => unreachable!(),
