@@ -1,8 +1,8 @@
 [package]
-name = "terminus"
+name = "TreeTerminus"
 version = "0.1.0"
-authors = ["Rob Patro <rob@cs.umd.edu>", "Hirak Sarkar <hsarkar@cs.umd.edu>"]
-edition = "2018"
+authors = ["Rob Patro <rob@cs.umd.edu>", "Noor Pratap Singh <npsingh@umd.edu>"]
+edition = "2021"
 
 [dependencies]
 GSL = "*"
