@@ -23,12 +23,12 @@ impl ConsensusFileList {
                 dir.to_str().unwrap()
             );
         }
-        
+
         ConsensusFileList {
             cluster_bp_splits_file: dir.as_path().join("cluster_bipart_splits.txt"),
             cons_nwk_file: dir.as_path().join("cluster_nwk.txt"),
             merged_groups_file: dir.as_path().join("merged_groups_length.txt"),
-      //      groups_length: dir.as_path().join("groups_length.txt")
+            //      groups_length: dir.as_path().join("groups_length.txt")
         }
     }
 }
@@ -56,7 +56,6 @@ pub struct FileList {
     pub group_nwk_file: PathBuf,
     pub mgroup_nwk_file: PathBuf,
     pub param_log_file: PathBuf,
-    
 }
 
 // construct the files
