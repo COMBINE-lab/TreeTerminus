@@ -75,7 +75,7 @@ To run `TreeTerminus`, first move to its directory as:
 cd TreeTerminus
 ```
 
-To run `group` step on a single `SampleA`, run:
+To run `group` step on a single sample such as `SampleA`, run:
 ```
 target/release/treeterminus group -d ../SalmonQuant/SampleA -o ../TreeTermOut --mean_inf false
 ```
