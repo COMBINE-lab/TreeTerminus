@@ -1,9 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap, HashSet};
-
-fn print_type_of<T>(_: &T) {
-    println!("{}", std::any::type_name::<T>());
-}
+use std::collections::{HashMap, HashSet};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TreeNode {
@@ -15,7 +11,7 @@ pub struct TreeNode {
 impl TreeNode {
     pub fn create_leaf(id: String) -> TreeNode {
         TreeNode {
-            id: id,
+            id,
             left: None,
             right: None,
         }
@@ -31,7 +27,7 @@ impl TreeNode {
 
     // Create group from t1_t2
     fn create_single_group(s: String) -> TreeNode {
-        let txps: Vec<&str> = s.split("_").collect();
+        let txps: Vec<&str> = s.split('_').collect();
         let mut root = TreeNode::create_leaf(txps[0].to_string());
 
         for i in txps.iter().skip(1) {
@@ -55,13 +51,13 @@ impl TreeNode {
     // Might Borrow the implementation defined in
     // https://sachanganesh.com/programming/graph-tree-traversals-in-rust/
     pub fn traverse_tree(&self) {
-        if !self.left.is_none() {
+        if self.left.is_some() {
             println!("root is {}", self.id);
             let d = self.left.as_ref().unwrap();
             println!("left is {}", d.id);
             self.left.as_ref().unwrap().traverse_tree();
         }
-        if !self.right.is_none() {
+        if self.right.is_some() {
             println!("root is {}", self.id);
             let d = self.right.as_ref().unwrap();
             println!("right is {}", d.id);
@@ -74,7 +70,7 @@ impl TreeNode {
 // Criteria - Each bipartition is first sorted and then returned as parent and child
 pub fn get_bipart_split(par: &HashSet<u32>, child: &str) -> String {
     let child_set: HashSet<u32> = child
-        .split("_")
+        .split('_')
         .map(|x| x.parse::<u32>().unwrap())
         .collect();
     //println!("{:?}",child_set);
@@ -88,7 +84,7 @@ pub fn get_bipart_split(par: &HashSet<u32>, child: &str) -> String {
     if req_par.len() == 1 && child_set.len() == 1 {
         req_par.push(child_set[0]);
         req_par.sort();
-        return format!("{}bp{}", req_par[0].to_string(), req_par[1].to_string());
+        return format!("{}bp{}", req_par[0], req_par[1]);
     }
     let (req_par, child_set) = if req_par.len() > child_set.len() {
         (req_par, child_set)
@@ -122,7 +118,7 @@ pub fn compute_bipart_count(
     root_set: &HashSet<u32>,
     g_bipart: &mut Vec<String>,
 ) {
-    if !node.left.is_none() {
+    if node.left.is_some() {
         //println!("root is {}", node.id);
         let split = get_bipart_split(root_set, &node.left.as_ref().unwrap().id);
         if !dir_bp_map.contains_key(&split) {
@@ -140,7 +136,7 @@ pub fn compute_bipart_count(
             g_bipart,
         );
     }
-    if !node.right.is_none() {
+    if node.right.is_some() {
         //println!("root is {}", node.id);
         let split = get_bipart_split(root_set, &node.right.as_ref().unwrap().id);
         if !dir_bp_map.contains_key(&split) {
@@ -164,7 +160,7 @@ pub fn compute_bipart_count2(
     bp_map: &mut HashMap<String, u32>,
     dir_bp_map: &mut HashMap<String, u32>,
 ) {
-    if !node.left.is_none() {
+    if node.left.is_some() {
         //println!("root is {}", node.id);
         //let split = get_bipart_split(root_set, &node.left.as_ref().unwrap().id);
         let bpart = sort_group_id(&node.left.as_ref().unwrap().id);
@@ -173,14 +169,14 @@ pub fn compute_bipart_count2(
         }
         //    g_bipart.push(split.clone());
         dir_bp_map.insert(bpart.clone(), 1);
-        let count = bp_map.entry(bpart.clone()).or_insert(0);
+        let count = bp_map.entry(bpart).or_insert(0);
         *count += 1;
 
         //println!("left is {}", d.id);
         //compute_bipart_count(node.left.as_ref().unwrap(), bp_map, dir_bp_map, root_set, g_bipart);
         compute_bipart_count2(node.left.as_ref().unwrap(), bp_map, dir_bp_map);
     }
-    if !node.right.is_none() {
+    if node.right.is_some() {
         //println!("root is {}", node.id);
         //let split = get_bipart_split(root_set, &node.right.as_ref().unwrap().id);
         let bpart = sort_group_id(&node.right.as_ref().unwrap().id);
@@ -189,7 +185,7 @@ pub fn compute_bipart_count2(
         }
         //g_bipart.push(split.clone());
         dir_bp_map.insert(bpart.clone(), 1);
-        let count = bp_map.entry(bpart.clone()).or_insert(0);
+        let count = bp_map.entry(bpart).or_insert(0);
         *count += 1;
 
         //compute_bipart_count(node.right.as_ref().unwrap(), bp_map, dir_bp_map, root_set, g_bipart);
@@ -199,11 +195,11 @@ pub fn compute_bipart_count2(
 
 pub fn sort_group_id(group: &str) -> String {
     let mut tps: Vec<u32> = group
-        .split("_")
+        .split('_')
         .map(|x| x.parse::<u32>().unwrap())
         .collect();
     tps.sort();
-    let mut group = tps
+    let group = tps
         .iter()
         .map(|x| x.to_string())
         .collect::<Vec<String>>()
@@ -213,11 +209,11 @@ pub fn sort_group_id(group: &str) -> String {
 
 pub fn get_binary_rooted_newick_string(node: &TreeNode) -> String {
     if node.left.is_none() && node.right.is_none() {
-        return node.id.clone();
+        node.id.clone()
     } else {
         let l = get_binary_rooted_newick_string(node.left.as_ref().unwrap());
         let r = get_binary_rooted_newick_string(node.right.as_ref().unwrap());
-        return format!("({},{})", l.clone(), r.clone());
+        format!("({},{})", l, r)
     }
 }
 // fn main () {

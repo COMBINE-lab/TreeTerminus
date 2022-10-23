@@ -7,26 +7,24 @@ extern crate serde_json;
 extern crate serde_pickle;
 extern crate serde_stacker;
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use std::fs::*;
 use std::io::Write;
-use std::io::{self, BufRead, BufReader};
-use std::process;
+use std::io::{self, BufReader};
 
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use ndarray::prelude::*;
 use num_format::{Locale, ToFormattedString};
-use petgraph as pg;
-use petgraph::algo::{connected_components, tarjan_scc};
+
+use petgraph::algo::connected_components;
 use petgraph::unionfind::UnionFind;
-use rayon::prelude::*;
 use std::path::PathBuf;
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::json;
 
 // Name of the program, to be used in diagnostic messages.
-static PROGRAM_NAME: &str = "terminus";
+static PROGRAM_NAME: &str = "treeterminus";
 
 /// Exit the program, printing an error message on stderr, and returning
 /// a specific error code. The program name is prefixed onto the front of
@@ -48,7 +46,7 @@ fn exit_with_error(status: i32, message: &str) {
 fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     //let mut groups: Vec<Vec<usize>> = Vec::new();
     //let dir_paths : Vec<_> = sub_m.values_of("dirs").unwrap().collect();
-    let mut dname: String = sub_m.value_of("dir").unwrap().to_string();
+    let dname: String = sub_m.value_of("dir").unwrap().to_string();
     let prefix: String = sub_m.value_of("out").unwrap().to_string();
     create_dir_all(prefix.clone())?;
 
@@ -92,12 +90,6 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         .parse::<f64>()
         .expect("could not parse inf percentile");
 
-    let sub_mean = sub_m
-        .value_of("m_sub")
-        .unwrap()
-        .parse::<bool>()
-        .expect("could not parse bool");
-
     let mut dir_paths: Vec<String> = Vec::new();
     if mean_inf {
         let sd = read_dir(dname.clone());
@@ -107,7 +99,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
                 .path()
                 .to_str()
                 .unwrap()
-                .rsplit("/")
+                .rsplit('/')
                 .collect::<Vec<_>>()[0]
                 .to_string();
             if x == "quant.sf" {
@@ -174,6 +166,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
                 x_vec[_i].num_valid_targets as usize,
                 x_vec[_i].num_bootstraps as usize,
             )));
+            #[allow(unused_assignments)]
             if _i == 0 {
                 gibbs_mat_mean = Array1::<f64>::zeros(gibbs_array_vec[0].shape()[0] as usize);
                 x = x_vec[0].clone();
@@ -193,30 +186,20 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
             for (j, eq) in eq_class_vec[_i].classes.iter().enumerate() {
                 eq_class_counts[l + j] = eq.2;
                 if j == eq_class_vec[_i].neq - 1 {
-                    l = l + j;
+                    l += j;
                 }
             }
             l += 1;
-            println!("l={}", l);
         }
         x = x_vec[0].clone();
-        gibbs_mat_mean = gibbs_mat_mean / gibbs_array_vec.len() as f64;
+        gibbs_mat_mean /= gibbs_array_vec.len() as f64;
         eq_class = eq_class_vec[0].clone();
-        println!(
-            "{}, {}, {}, {}",
-            eq_class.neq,
-            eq_class.classes.offsets.len(),
-            eq_class.classes.labels.len(),
-            eq_class.classes.weights.len()
-        );
-        // println!("{}, {}, {}, {}, {:?}, {:?}, {:?}, {:?}", eq_class.classes.offsets[0], eq_class.classes.offsets[1],
-        // eq_class.classes.offsets[eq_class.classes.offsets.len()-2], eq_class.classes.offsets[eq_class.classes.offsets.len()-1],
-        // eq_class.classes.weights[0], eq_class.classes.weights[1],
-        // eq_class.classes.weights[eq_class.classes.weights.len()-2], eq_class.classes.weights[eq_class.classes.weights.len()-1]);
+        #[allow(clippy::needless_range_loop)]
         for j in 1..eq_class_vec.len() {
             eq_class.neq += eq_class_vec[j].neq;
             let prev_off = eq_class.classes.offsets[eq_class.classes.offsets.len() - 1];
-            let mut offset = vec![0 as usize; eq_class_vec[j].classes.offsets.len() - 1];
+            let mut offset = vec![0_usize; eq_class_vec[j].classes.offsets.len() - 1];
+            #[allow(clippy::needless_range_loop)]
             for _i in 0..offset.len() {
                 offset[_i] = eq_class_vec[j].classes.offsets[_i + 1] + prev_off;
             }
@@ -256,7 +239,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     }
 
     // if a2g exists also dumps gene level groups
-    let mut allele2txp = PathBuf::from(sub_m.value_of("a2t").unwrap().to_string());
+    let allele2txp = PathBuf::from(sub_m.value_of("a2t").unwrap().to_string());
     let asemode: bool = allele2txp.as_path().is_file();
     if asemode {
         println!(
@@ -266,7 +249,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     }
 
     // if t2g exists restrict equivalence classes to gene level groups
-    let mut transcript2gene = PathBuf::from(sub_m.value_of("t2g").unwrap().to_string());
+    let transcript2gene = PathBuf::from(sub_m.value_of("t2g").unwrap().to_string());
     let txpmode: bool = transcript2gene.as_path().is_file();
     if txpmode {
         println!(
@@ -299,7 +282,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
 
     if asemode {
         util::get_map_bw_ent(
-            &mut allele2txp,
+            &allele2txp,
             &mut txp2allele_map,
             &mut allele2txp_map,
             &tnames,
@@ -315,7 +298,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
 
     if txpmode {
         util::get_map_bw_ent(
-            &mut transcript2gene,
+            &transcript2gene,
             &mut gene2allele_map,
             &mut allele2gene_map,
             &tnames,
@@ -343,7 +326,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     }
 
     // let inf_perc = 0.25f64;
-    let p = match (mean_inf) {
+    let p = match mean_inf {
         false => util::get_infrv_percentile(&gibbs_array, inf_perc),
         true => {
             let mut cum_infrv_perc: f64 = 0.0;
@@ -361,19 +344,17 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
 
     println!("the {}% of infRV was : {}", inf_perc * 100., p);
 
-    let mut thr = match (thr_bool) {
+    let thr = match thr_bool {
         true => {
-            let mut val;
             if !mean_inf {
-                val = util::get_threshold(&gibbs_array, p, seed, &file_list_out);
+                util::get_threshold(&gibbs_array, p, seed, &file_list_out)
             } else {
                 let mut thresh = 0.0;
                 for gb in gibbs_array_vec.iter() {
-                    thresh += util::get_threshold(&gb, p, seed, &file_list_out);
+                    thresh += util::get_threshold(gb, p, seed, &file_list_out);
                 }
-                val = thresh / (gibbs_array_vec.len() as f64);
+                thresh / (gibbs_array_vec.len() as f64)
             }
-            val
         }
         false => 1e7,
     };
@@ -448,7 +429,6 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         thr,
         p,
         &mut cfile,
-        &mut group_order,
         &mut collapse_order,
         mean_inf,
     );
@@ -482,14 +462,13 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         "p":p,
         "thr":thr,
         "ntxps":eq_class.ntarget,
-        "connected_componets":num_connected_components,
+        "connected_components":num_connected_components,
         "ncollapses":num_collapses,
-    "m_sub":sub_mean
     });
 
-    let mut param_log_file =
+    let param_log_file =
         File::create(file_list_out.param_log_file).expect("could not create group order file");
-    let _write = serde_json::to_writer(param_log_file, &params)?;
+    serde_json::to_writer(param_log_file, &params)?;
     let mut gfile = File::create(file_list_out.group_file).expect("could not create groups.txt");
     let mut co_file = File::create(file_list_out.collapse_order_file)
         .expect("could not create collapse order file");
@@ -502,22 +481,10 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
 }
 
 fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
-    let num_threads = sub_m
-        .value_of("threads")
-        .unwrap()
-        .parse::<usize>()
-        .expect("could not parse --threads option");
-    // set the number of rayon threads
-    rayon::ThreadPoolBuilder::new()
-        .num_threads(num_threads)
-        .build_global()
-        .unwrap_or_else(|_| panic!("could not set number of rayon threads to {}", num_threads));
-
-    //let dir_paths: Vec<&str> = sub_m.values_of("dirs").unwrap().collect();
     let sal_dir: String = sub_m.value_of("dirs").unwrap().to_string();
-    let md = metadata(sal_dir.clone()).unwrap_or_else(|_| panic!("Invalid directory {}", sal_dir));
+    let _md = metadata(sal_dir.clone()).unwrap_or_else(|_| panic!("Invalid directory {}", sal_dir));
 
-    let mut sal_dir_paths = read_dir(sal_dir)?
+    let sal_dir_paths = read_dir(sal_dir)?
         .map(|res| res.map(|e| e.path()))
         .filter(|res| res.as_ref().unwrap().is_dir())
         .collect::<Result<Vec<_>, io::Error>>()?;
@@ -528,26 +495,22 @@ fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     }
     let prefix: String = sub_m.value_of("out").unwrap().to_string();
 
-    //let mut bipart_counter: HashMap<String, u32> = HashMap::new();
     let mut bipart_counter: HashMap<String, HashMap<String, u32>> = HashMap::new();
-    let mut global_graph = pg::Graph::<usize, u32, petgraph::Undirected>::new_undirected();
     let mut group_keys: Vec<String> = Vec::new();
-    let mut l = 0; // num of groups in 1st
+    // let mut l = 0; // num of groups in 1st
     let mut ntxps = 0; // num of transcripts
     let mut tnames: Vec<String> = Vec::new();
     // add edges
     for (i, dname) in dir_paths.iter().enumerate() {
         //let dname = dname.as_path().to_str().unwrap();
         let compo: Vec<&str> = dname.rsplit('/').collect();
-        if compo[0].chars().next().unwrap() == '.' {
+        if compo[0].starts_with('.') {
             continue;
         }
         let experiment_name = compo[0];
         println!("experiment name {}", experiment_name);
 
-        //let mut bipart_counter: HashMap<String, u32> = HashMap::new();
         let mut dir_bipart_counter: HashMap<String, HashMap<String, u32>> = HashMap::new(); // Storing counts of each bipartition
-                                                                                            //let mut group_bipart: HashMap<String, Vec<String>> = HashMap::new(); // Storing all bipartitions per group
 
         let mut prefix_path = prefix.clone();
         prefix_path.push('/');
@@ -563,28 +526,22 @@ fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         //println!("{:?}", deserializer);
         let collapse_order: HashMap<String, binary_tree::TreeNode> =
             HashMap::deserialize(&mut deserializer).unwrap(); // can be replaced by vector
-        for (key, node) in &collapse_order {
+        for key in collapse_order.keys() {
             let node = collapse_order.get(key).unwrap();
             let req_group = binary_tree::sort_group_id(&node.id);
             //let node_vec = group_bipart.entry(node.id.clone()).or_insert(Vec::<String>::new());
             let dir_group_key = dir_bipart_counter
                 .entry(req_group.clone())
-                .or_insert(HashMap::new());
+                .or_insert_with(HashMap::new);
             let overall_group_key = bipart_counter
                 .entry(req_group.clone())
-                .or_insert(HashMap::new());
-            let node_set: HashSet<u32> = node
-                .id
-                .clone()
-                .split("_")
-                .map(|x| x.parse::<u32>().unwrap())
-                .collect();
+                .or_insert_with(HashMap::new);
+
             //binary_tree::compute_bipart_count(node, &mut bipart_counter, &mut dir_bipart_counter, &node_set, node_vec);
             group_keys.push(req_group.clone());
             binary_tree::compute_bipart_count2(node, overall_group_key, dir_group_key);
         }
         if i == 0 {
-            l = dir_bipart_counter.len();
             let file_old = salmon_types::FileList::new(dname.to_string());
             let eq_class = util::parse_eq(&file_old.eq_file).unwrap();
             ntxps = eq_class.ntarget;
@@ -602,214 +559,12 @@ fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         );
         let mut bipart_file = File::create(file_list_out.group_bp_splits_file)
             .expect("could not create group bp splits");
-        let _f = util::mapTrait::bipart_writer(&dir_bipart_counter, &mut bipart_file, &tnames);
-    } // all files
-    println!("Total number of groups are {}", bipart_counter.len());
-    let m_groups = sub_m
-        .value_of("merge_groups")
-        .unwrap()
-        .parse::<bool>()
-        .expect("could not parse --merge_groups option");
-
-    let m_type = sub_m.value_of("merge_type").unwrap().to_string();
-
-    if m_groups {
-        println!("{}", m_type);
-        if m_type == "BP" {
-            bipart_counter = collapse::merge_groups(&bipart_counter, ntxps);
-            println!("Groups after merging {:?}", bipart_counter.len());
-            let mut co = File::create("co_file.txt").expect("could not create collapse order file");
-            let _write = util::mapTrait::bipart_writer(&bipart_counter, &mut co, &tnames);
-        } else if m_type == "phylip" {
-            let all_groups: Vec<String> = bipart_counter.keys().cloned().collect();
-            collapse::use_phylip(&dir_paths, &prefix, &all_groups, ntxps);
-        }
+        let _f = util::MapTrait::bipart_writer(&dir_bipart_counter, &mut bipart_file, &tnames);
     }
+    let all_groups: Vec<String> = bipart_counter.keys().cloned().collect();
+    collapse::use_phylip(&dir_paths, &prefix, &all_groups, ntxps);
 
     // filter based on the threshold
-    let consensus_thresh = sub_m
-        .value_of("consensus-thresh")
-        .unwrap()
-        .parse::<f64>()
-        .expect("could not parse --consensus-thresh option");
-    if m_type == "BP" {
-        let half_length = (dir_paths.len() as f64 * consensus_thresh).floor() as u32;
-        let global_filtered_graph = global_graph.filter_map(
-            |_, n| Some(*n),
-            |_, &e| {
-                if (e as usize) >= half_length as usize {
-                    Some(e)
-                } else {
-                    None
-                }
-            },
-        );
-        for (_, group) in bipart_counter.iter_mut() {
-            //let group_bpart = bipart_counter.get_mut(&group.clone()).unwrap();
-            group.retain(|key, value| *value >= half_length);
-        }
-        let mut total_in_group = 0;
-        let mut num_group = 0;
-        for (bipart_split, _) in bipart_counter.iter() {
-            total_in_group += bipart_split.split("_").collect::<Vec<&str>>().len() + 1; //+1 for bp
-            num_group += 1;
-        }
-        let term_info = salmon_types::TerminusInfo {
-            num_nontrivial_groups: num_group,
-            num_targets_in_nontrivial_group: total_in_group,
-        };
-        println!(
-            "total number of transcripts in a non-trivial group : {}",
-            total_in_group
-        );
-        println!("total consensus clusters : {}", num_group);
-        let file_list_out = salmon_types::ConsensusFileList::new(prefix.clone());
-        let mut bipart_file = File::create(file_list_out.cluster_bp_splits_file.clone())
-            .expect("could not create cluster bp splits");
-        let _f = util::mapTrait::bipart_writer(&bipart_counter, &mut bipart_file, &tnames);
-    }
-
-    // if t2g exists also dumps gene level groups
-    // let transcript2gene = PathBuf::from(sub_m.value_of("t2g").unwrap().to_string());
-    // println!(
-    //     "transcript2gene file: {:?}",
-    //     transcript2gene.to_str().unwrap()
-    // );
-    // if transcript2gene.as_path().is_file() {
-    //     // get name of the transcripts from any directory
-    //     println!("=============Reducing to gene groups=============");
-    //     let mut t2gmap: HashMap<String, String> = HashMap::new();
-    //     let mut genemap: HashMap<String, u32> = HashMap::new();
-    //     let genenames = util::get_t2g(&transcript2gene, &mut genemap, &mut t2gmap);
-    //     println!("{} genes exist in the file", genenames.len());
-
-    //     let file_list = salmon_types::FileList::new((dir_paths[0]).to_string());
-    //     let x = util::parse_json(&file_list.mi_file).expect("json file could not be parsed");
-    //     let rec =
-    //         util::parse_quant(&file_list.quant_file, &x).expect("quant file could not be parsed");
-
-    //     let mut genevec: Vec<u32> = vec![0u32; rec.len()];
-    //     let mut genevecpresent: Vec<bool> = vec![false; rec.len()];
-    //     let mut notfound = 0;
-    //     for i in 0..rec.len() {
-    //         let tname = rec[i].Name.clone();
-    //         // println!("Searching for {:?}", tname);
-    //         match t2gmap.get(&tname) {
-    //             Some(gname) => match genemap.get(gname) {
-    //                 Some(geneid) => {
-    //                     genevec[i] = *geneid;
-    //                     genevecpresent[i] = true;
-    //                 }
-    //                 None => {
-    //                     println!("Not found {:?}, {:?}", tname, gname);
-    //                 }
-    //             },
-    //             None => {
-    //                 //println!("transcript name not found {}", tname);
-    //                 notfound += 1;
-    //             }
-    //         }
-    //     }
-    //     if notfound > 0 {
-    //         println!("{} transcripts not in {:?}", notfound, transcript2gene);
-    //     }
-    //     let mut global_gene_graph = pg::Graph::<usize, u32, petgraph::Undirected>::new_undirected();
-    //     if global_gene_graph.node_count() == 0 {
-    //         for i in 0..genenames.len() {
-    //             let idx = global_gene_graph.add_node(i as usize);
-    //             // the index assigned by the graph should be the
-    //             // order in which we add these
-    //             debug_assert_eq!(i as usize, idx.index());
-    //         }
-    //     }
-    //     println!("Initial graph constructed");
-    //     for edge in global_filtered_graph.raw_edges() {
-    //         let source = edge.source().index();
-    //         let end = edge.target().index();
-    //         if !(genevecpresent[source] && genevecpresent[end]) {
-    //             continue;
-    //         }
-    //         let na = genevec[source];
-    //         let nb = genevec[end];
-    //         let va = pg::graph::NodeIndex::new(na as usize);
-    //         let vb = pg::graph::NodeIndex::new(nb as usize);
-    //         let e = global_gene_graph.find_edge(va, vb);
-    //         match e {
-    //             Some(ei) => {
-    //                 let ew = global_gene_graph
-    //                     .edge_weight_mut(ei)
-    //                     .expect("edge weight not found");
-    //                 *ew += 1;
-    //             }
-    //             None => {
-    //                 global_gene_graph.add_edge(va, vb, 1);
-    //             }
-    //         }
-    //     }
-    //     // components
-    //     let mut comps_gene: Vec<Vec<_>> = tarjan_scc(&global_gene_graph);
-    //     // comps_gene.sort_by(|v, w| v.len().cmp(&w.len()));
-    //     comps_gene.sort_by_key(|v| v.len());
-    //     println!("Done reducing to gene level groups");
-    //     // let mut gfile = File::create(file_list.gene_cluster_file).expect("could not create groups.txt");
-    //     // let _write = util::gene_writer(&mut gfile, &comps_gene, &genenames);
-    //     dir_paths.clone().into_par_iter().for_each(|dname| {
-    //         let compo: Vec<&str> = dname.rsplit('/').collect();
-    //         let experiment_name = compo[0];
-    //         let mut prefix_path = prefix.clone();
-    //         prefix_path.push('/');
-    //         prefix_path.push_str(experiment_name);
-    //         let file_list_out = salmon_types::FileList::new(prefix_path);
-    //         let mut gfile =
-    //             File::create(file_list_out.gene_cluster_file).expect("could not create groups.txt");
-    //         let _write = util::gene_writer(&mut gfile, &comps_gene, &genenames);
-    //     });
-    // }
-
-    // // components
-    // let mut comps: Vec<Vec<_>> = tarjan_scc(&global_filtered_graph);
-    // comps.sort_by(|v, w| v.len().cmp(&w.len()));
-    // comps.sort_by_key(|v| v.len());
-    // // write a json file containing
-    // // new number of nodes, number of components, etc
-
-    //let mut l = term_info;
-    // // for each experiment call the writer
-    // println!("=============Writing collapsed output=============");
-    // dir_paths.into_par_iter().for_each(|dname| {
-    //     // getting prepared for output
-    //     let compo: Vec<&str> = dname.rsplit('/').collect();
-    //     let experiment_name = compo[0];
-    //     let mut prefix_path = prefix.clone();
-    //     prefix_path.push('/');
-    //     prefix_path.push_str(experiment_name);
-    //     let file_list_out = salmon_types::FileList::new(prefix_path.to_string());
-    //     let file_list = salmon_types::FileList::new(dname.to_string());
-    //     // create output directory
-    //     println!("Sample {}", experiment_name);
-
-    //     let bpath = std::path::Path::new(&prefix_path);
-    //     let term_info_path = bpath.join("terminus_info.json");
-    //     let estr = format!("could not write terminus_info.json in {}", prefix_path);
-    //     ::serde_json::to_writer(&File::create(term_info_path).expect(&estr), &term_info)
-    //         .expect(&estr);
-    //     // load old files
-    //     // let x = util::parse_json(&file_list.mi_file).unwrap();
-    //     // copy cmd_info.json from old location to new
-    //     std::fs::copy(&file_list.cmd_file, &file_list_out.cmd_file)
-    //         .expect("Could not copy cmd_info.json.");
-    //     let x = util::parse_json(&file_list.mi_file).unwrap();
-    //     let rec = util::parse_quant(&file_list.quant_file, &x).unwrap();
-    //     let mut gibbs_array =
-    //         Array2::<f64>::zeros((x.num_valid_targets as usize, x.num_bootstraps as usize));
-    //     util::read_gibbs_array(&file_list.bootstrap_file, &x, &mut gibbs_array);
-
-    //     let mut bipart_file = File::create(file_list_out.cluster_bp_splits_file.clone()).expect("could not create cluster bp splits");
-    //     let _f = util::mapTrait::bipart_writer(&bipart_counter, &mut bipart_file, &tnames);
-    // // //     //call the writer
-    //     let _res =
-    //         util::write_quants_from_components(&comps, &file_list_out, &gibbs_array, &x, &rec);
-    // });
 
     Ok(true)
 }
@@ -858,8 +613,7 @@ fn main() -> io::Result<()> {
                     .long("seed")
                     .takes_value(true)
                     .default_value("10")
-                    .help("The allowable difference between the weights of transcripts \
-                          in same equivalence classes to treat them as identical")
+                    .help("seed for random generator")
             )
             .arg(
                 Arg::with_name("a2t")
@@ -879,8 +633,8 @@ fn main() -> io::Result<()> {
                 Arg::with_name("thresh")
                     .long("thr")
                     .takes_value(true)
-                    .default_value("true")
-                    .help("do we use a threshold for collapsing")
+                    .default_value("false")
+                    .help("should a threshold be used for collapsing")
             )
             .arg(
                 Arg::with_name("out")
@@ -903,15 +657,8 @@ fn main() -> io::Result<()> {
                 .long("inf_perc")
                 .short("i")
                 .takes_value(true)
-                .default_value("0.25")
+                .default_value("0")
                 .help("inferential variance percentile threshold that determines whether a transcript will be considered for grouping")
-            )
-            .arg(
-                Arg::with_name("m_sub")
-                .long("m_sub")
-                .takes_value(true)
-                .default_value("false")
-                .help("Subtracting 1 from mean of inferential variance")
             )
         )
         .subcommand(
@@ -935,55 +682,16 @@ fn main() -> io::Result<()> {
                     .requires("dirs")
                     .help("prefix where output would be written")
             )
-            .arg(
-                Arg::with_name("t2g")
-                    .long("t2g")
-                    .takes_value(true)
-                    .requires("dirs")
-                    .default_value("")
-                    .help("use this to group to genes")
-            )
-            .arg(
-                Arg::with_name("threads")
-                    .long("threads")
-                    .short("t")
-                    .takes_value(true)
-                    .default_value("8")
-                    .help("number of threads to use when writing down the collapsed quantifications")
-            )
-            .arg(
-                Arg::with_name("consensus-thresh")
-                .long("consensus-thresh")
-                .short("c")
-                .takes_value(true)
-                .default_value("0.5")
-                .help("threshold for edge consensus")
-            )
-            .arg(
-                Arg::with_name("merge_groups")
-                .long("merge-groups")
-                .short("m")
-                .takes_value(true)
-                .default_value("true")
-                .help("Merge groups")
-            )
-            .arg(
-                Arg::with_name("merge_type")
-                .long("merge_type")
-                .takes_value(true)
-                .default_value("phylip")
-                .help("Merging method")
-            )
         ).get_matches();
 
     pretty_env_logger::init_timed();
 
     match matches.subcommand() {
         ("group", Some(sub_m)) => {
-            do_group(&sub_m).expect("Grouping failed");
+            do_group(sub_m).expect("Grouping failed");
         }
         ("consensus", Some(sub_m)) => {
-            do_collapse(&sub_m).expect("Grouping failed");
+            do_collapse(sub_m).expect("Grouping failed");
         }
         _ => unreachable!(),
     }

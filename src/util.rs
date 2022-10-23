@@ -1,19 +1,15 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::convert::TryInto;
 use std::f64;
 use std::fs::*;
 use std::io::prelude::*;
-use std::io::{self, BufReader, BufWriter};
+use std::io::{self, BufReader};
 use std::time::Instant;
 //use std::num::pow::pow;
 //use std::collections::BinaryHeap;
 
 use binary_heap_plus::*;
 use byteorder::{ByteOrder, LittleEndian};
-use flate2::read::GzDecoder;
-use flate2::write::GzEncoder;
-use flate2::Compression;
 use itertools::Itertools;
 use nalgebra as na;
 use ndarray::prelude::*;
@@ -30,7 +26,10 @@ use refinery::Partition;
 //use rgsl::statistics::correlation;
 use crate::binary_tree::{get_binary_rooted_newick_string, sort_group_id, TreeNode};
 use crate::salmon_types::{EdgeInfo, EqClassExperiment, FileList, MetaInfo, TxpRecord};
+use flate2::read::GzDecoder;
 use std::iter::FromIterator;
+// use flate2::write::GzEncoder;
+// use flate2::Compression;
 
 // General functions to r/w files
 // files to be handled
@@ -54,20 +53,19 @@ use std::iter::FromIterator;
 //     }
 //     Ok(true)
 // }
-fn conv_names(g: &String, tnames: &[String]) -> String {
+fn conv_names(g: &str, tnames: &[String]) -> String {
     let s: Vec<String> = g
-        .clone()
-        .split("_")
+        .split('_')
         .map(|x| tnames[x.parse::<usize>().unwrap()].clone())
         .collect();
-    return s.join(",");
+    s.join(",")
 }
 
-pub trait mapTrait {
+pub trait MapTrait {
     fn bipart_writer(&self, file: &mut File, tnames: &[String]) -> Result<bool, io::Error>;
 }
 
-impl mapTrait for HashMap<String, HashMap<String, u32>> {
+impl MapTrait for HashMap<String, HashMap<String, u32>> {
     fn bipart_writer(&self, g_bp_file: &mut File, tnames: &[String]) -> Result<bool, io::Error> {
         //let l = group_bipart.len();
         //let mut i = 0;
@@ -75,19 +73,19 @@ impl mapTrait for HashMap<String, HashMap<String, u32>> {
             writeln!(
                 g_bp_file,
                 "gr\t{}\t{}",
-                conv_names(&group_id, &tnames),
+                conv_names(group_id, tnames),
                 bpart_hash.len()
             )?;
             let mut v = Vec::from_iter(bpart_hash);
-            v.sort_by(|&(_, a), &(_, b)| b.cmp(&a));
+            v.sort_by(|&(_, a), &(_, b)| b.cmp(a));
             for (bpart, count) in v {
-                writeln!(g_bp_file, "{}\t{}", conv_names(&bpart, &tnames), count)?;
+                writeln!(g_bp_file, "{}\t{}", conv_names(bpart, tnames), count)?;
             }
         }
         Ok(true)
     }
 }
-impl mapTrait for HashMap<String, BTreeMap<String, u32>> {
+impl MapTrait for HashMap<String, BTreeMap<String, u32>> {
     fn bipart_writer(&self, g_bp_file: &mut File, tnames: &[String]) -> Result<bool, io::Error> {
         //let l = group_bipart.len();
         //let mut i = 0;
@@ -95,13 +93,13 @@ impl mapTrait for HashMap<String, BTreeMap<String, u32>> {
             writeln!(
                 g_bp_file,
                 "gr\t{}\t{}",
-                conv_names(&group_id, &tnames),
+                conv_names(group_id, tnames),
                 bpart_hash.len()
             )?;
             let mut v = Vec::from_iter(bpart_hash);
-            v.sort_by(|&(_, a), &(_, b)| b.cmp(&a));
+            v.sort_by(|&(_, a), &(_, b)| b.cmp(a));
             for (bpart, count) in v {
-                writeln!(g_bp_file, "{}\t{}", conv_names(&bpart, &tnames), count)?;
+                writeln!(g_bp_file, "{}\t{}", conv_names(bpart, tnames), count)?;
             }
         }
         Ok(true)
@@ -132,20 +130,7 @@ pub fn group_writer(
     //let mut file = GzEncoder::new(file_handle, Compression::default());
     for (group_id, group) in groups {
         let strings: Vec<String> = group.iter().map(|n| n.to_string()).collect();
-        writeln!(gfile, "{},{}", group_id.to_string(), strings.join(","))?;
-    }
-    Ok(true)
-}
-
-pub fn group_writer2(
-    gfile: &mut File,
-    groups: &HashMap<String, Vec<String>>,
-) -> Result<bool, io::Error> {
-    //let mut buffer = File::create("groups.txt")?;
-    //let mut buffer = File::create("foo.txt").unwrap();
-    //let mut file = GzEncoder::new(file_handle, Compression::default());
-    for (group_id, group) in groups {
-        writeln!(gfile, "{},{}", group_id.to_string(), group.join(","))?;
+        writeln!(gfile, "{},{}", group_id, strings.join(","))?;
     }
     Ok(true)
 }
@@ -164,7 +149,7 @@ pub fn collapse_order_writer(
     // co_updated.insert(0, c_order[0].clone());
     // co_updated.insert(1, c_order[1].clone());
     // co_updated.insert(2, c_order[10].clone());
-    for (group_id, _) in groups {
+    for group_id in groups.keys() {
         co_updated.insert(
             sort_group_id(&c_order[*group_id].id),
             c_order[*group_id].clone(),
@@ -182,23 +167,6 @@ pub fn collapse_order_writer(
     //let serialized = serde_pickle::to_writer(co_file, &co_updated, true);
     ::serde_json::to_writer(co_file, &co_updated).expect(&err_write);
 
-    Ok(true)
-}
-
-pub fn gene_writer(
-    gfile: &mut File,
-    components: &[Vec<pg::graph::NodeIndex>],
-    genenames: &[String],
-) -> Result<bool, io::Error> {
-    for (_i, comp) in components.iter().enumerate() {
-        if comp.len() > 1 {
-            let strings: Vec<String> = comp
-                .iter()
-                .map(|n| genenames[n.index()].to_string())
-                .collect();
-            writeln!(gfile, "{}", strings.join(","))?;
-        }
-    }
     Ok(true)
 }
 
@@ -220,192 +188,6 @@ pub fn get_merged_mat(
         }
     }
     merged_gibbs_mat
-}
-
-pub fn write_quants_from_components(
-    components: &[Vec<pg::graph::NodeIndex>],
-    file_list: &FileList,
-    gibbs_mat: &Array2<f64>,
-    meta_info: &MetaInfo,
-    rec: &[TxpRecord],
-) -> Result<bool, io::Error> {
-    let aux_dir = file_list.eq_file.parent().unwrap();
-    create_dir_all(aux_dir)?;
-    let bootstraps_dir = file_list.bootstrap_file.parent().unwrap();
-    create_dir_all(bootstraps_dir)?;
-
-    // write bootstrap file
-    let bt_file_handle = File::create(file_list.bootstrap_file.clone())?;
-    let mut file = GzEncoder::new(bt_file_handle, Compression::default());
-
-    // write quantfile
-    let quant_file =
-        File::create(file_list.quant_file.clone()).expect("Could not write quant file");
-    let mut quant_buf_writer = BufWriter::new(quant_file);
-
-    // write meta_info.jeson file
-    let mut json_file = File::create(file_list.mi_file.clone()).expect("Could not write json file");
-
-    // write names.tsv.gz file
-    let name_file_handle = File::create(file_list.names_tsv_file.clone())?;
-    let mut name_file = GzEncoder::new(name_file_handle, Compression::default());
-
-    // write cluster file
-    let mut cluster_file =
-        File::create(file_list.cluster_file.clone()).expect("Could not write cluster file");
-
-    let shape = gibbs_mat.shape();
-    let new_height = components.len();
-    let new_width = shape[1];
-
-    // new structure for gibbs
-    let mut gibbs_new_mat = Array2::<f64>::zeros((new_height, new_width));
-
-    // new structure for quant
-    // let rec = parse_quant(&quant_file, &meta_info);
-    let mut quant_new_rec: Vec<TxpRecord> = Vec::new();
-    quant_new_rec.resize_with(new_height, Default::default);
-
-    // meta file
-    // println!("{:?}, {}, {}", file_list.mi_file, new_height, shape[0]);
-    let mut meta_info_new = meta_info.clone();
-    meta_info_new.num_valid_targets = new_height.try_into().unwrap();
-    let meta_info_data = serde_json::to_string_pretty(&meta_info_new).unwrap();
-    // println!("{:?}", meta_info_data);
-    json_file.write_all(meta_info_data.as_bytes())?;
-
-    // names.tsv.gz
-    let mut name_vec: Vec<String> = vec!["".to_string(); new_height];
-
-    //let mut new_map = vec![0 as usize; new_height];
-    //let mut ind = 0 as usize;
-
-    for (i, comp) in components.iter().enumerate() {
-        if comp.len() == 1 {
-            // write it as it is
-            let mut s = gibbs_new_mat.slice_mut(s![i, ..]);
-            let component_index = comp[0].index();
-            let to_initiate = gibbs_mat.index_axis(Axis(0), component_index).to_owned();
-            s += &to_initiate;
-
-            if let Some(txp_rec_elem) = quant_new_rec.get_mut(i) {
-                let s = rec[component_index].clone();
-                txp_rec_elem.assign(&s);
-            }
-
-            name_vec[i] = rec[component_index].Name.clone();
-        } else {
-            // collpase groups
-
-            // the slice that will hold the gibbs samples for the group
-            let mut s = gibbs_new_mat.slice_mut(s![i, ..]);
-
-            // the sum of TPM for elements in the group (for normalizing lengths)
-            let group_tpm = comp
-                .iter()
-                .map(|g| rec[g.index()].TPM)
-                .fold(0_f64, |sum, e| sum + e as f64);
-            let nonzero = group_tpm > 0_f64;
-
-            // rewrite quants
-            let new_name = format!("NewTr{}", i);
-            name_vec[i] = new_name.clone();
-
-            let mut member_names: Vec<String> = Vec::with_capacity(comp.len());
-
-            if let Some(txp_rec_elem) = quant_new_rec.get_mut(i) {
-                let mut weighted_len;
-                let mut weighted_eff_len;
-
-                let mut component_index = comp[0].index();
-
-                s += &gibbs_mat.index_axis(Axis(0), component_index).to_owned();
-
-                let initial_elem = rec[component_index].clone();
-                member_names.push(initial_elem.Name.clone());
-
-                txp_rec_elem.assign(&initial_elem);
-                // the name is the new name
-                txp_rec_elem.Name = new_name.clone();
-                // the starting effective length is the *weighted* effective length
-                if nonzero {
-                    let expression_ratio = initial_elem.TPM as f64 / group_tpm;
-                    weighted_eff_len = (initial_elem.EffectiveLength as f64) * expression_ratio;
-                    weighted_len = (initial_elem.Length as f64) * expression_ratio;
-                } else {
-                    weighted_eff_len = initial_elem.EffectiveLength as f64;
-                    weighted_len = initial_elem.Length as f64;
-                }
-
-                for g in comp.iter().skip(1) {
-                    component_index = g.index();
-                    s += &gibbs_mat.index_axis(Axis(0), component_index).to_owned();
-
-                    let old_elem = rec[component_index].clone();
-                    let expression_ratio = old_elem.TPM as f64 / group_tpm;
-                    txp_rec_elem.TPM += old_elem.TPM;
-                    txp_rec_elem.NumReads += old_elem.NumReads;
-                    if nonzero {
-                        weighted_len += (old_elem.Length as f64) * expression_ratio;
-                        weighted_eff_len += (old_elem.EffectiveLength as f64) * expression_ratio;
-                    } else {
-                        weighted_eff_len = if old_elem.EffectiveLength as f64 > weighted_eff_len {
-                            old_elem.EffectiveLength as f64
-                        } else {
-                            weighted_eff_len
-                        };
-
-                        weighted_len = if old_elem.Length as f64 > weighted_len {
-                            old_elem.Length as f64
-                        } else {
-                            weighted_len
-                        };
-                    }
-                    member_names.push(old_elem.Name);
-                }
-
-                // set the length by rounding the weighted length
-                txp_rec_elem.Length = weighted_len.round() as u32;
-                txp_rec_elem.EffectiveLength = weighted_eff_len as f32;
-            }
-
-            writeln!(cluster_file, "{},{}", new_name, member_names.join(","))?;
-        }
-    }
-
-    // write bootstrap file
-    gibbs_new_mat = gibbs_new_mat.reversed_axes();
-    //println!("{:?}, {}", gibbs_new_mat.shape(),gibbs_new_mat.len());
-    assert!([new_width, new_height] == gibbs_new_mat.shape());
-
-    for i in 0..(new_width) {
-        let mut data: Vec<u8> = vec![0; (new_height * 8) as usize];
-        //br.read_exact(&mut data[..]).expect("could not read from inferential replicate file");
-        //let mut floats: na::DVector<f64> = na::DVector::<f64>::from_element(nt, 0.0);// Vec<f64> = vec![0.0_f64; nt];
-        LittleEndian::write_f64_into(&gibbs_new_mat.slice(s![i, ..]).to_vec(), &mut data);
-        file.write_all(&data)?;
-    }
-
-    // write quant.sf file
-    // println!("{}",msg);
-    quant_buf_writer
-        .write_all(b"Name\tLength\tEffectiveLength\tTPM\tNumReads\n")
-        .expect("couldn't write to quant.sf");
-
-    for elem in &quant_new_rec {
-        quant_buf_writer
-            .write_all(
-                &format!(
-                    "{}\t{}\t{}\t{}\t{}\n",
-                    elem.Name, elem.Length, elem.EffectiveLength, elem.TPM, elem.NumReads
-                )
-                .as_bytes(),
-            )
-            .expect("couldn't write to quant.sf");
-    }
-
-    name_file.write_all(name_vec.join("\t").as_bytes())?;
-    Ok(true)
 }
 
 #[allow(dead_code)]
@@ -533,12 +315,12 @@ pub fn get_map_bw_ent(
         assert!(!ent2.is_empty(), "txp/gene name is empty");
 
         let index = tnames.get(&ent1);
-        if (index.is_none()) {
+        if index.is_none() {
             panic!("Eq class file txps does not contain {}", ent1);
         }
         let index: usize = *index.unwrap();
 
-        let ent2_ind = ent2_map.get(&ent2);
+        // let ent2_ind = ent2_map.get(&ent2);
         if !ent2_map.contains_key(&ent2) {
             ent2_map.insert(ent2.clone(), j);
             j += 1;
@@ -604,11 +386,7 @@ fn var_1d(a: ArrayView1<'_, f64>) -> f64 {
 
 // find min and max divide by mean
 fn infrv_1d(a: ArrayView1<'_, f64>) -> f64 {
-    let sub_m = false;
-    let mu = match sub_m {
-        true => a.mean().unwrap() - 1.0,
-        false => a.mean().unwrap(),
-    };
+    let mu = a.mean().unwrap();
     let var = a.var_axis(Axis(0), 1.).into_scalar();
     //(var) / (mu + 0.1) + 0.01
     if (var - mu) >= 0. {
@@ -650,7 +428,7 @@ pub fn get_infrv_percentile(gibbs_mat: &Array2<f64>, p: f64) -> f64 {
         .filter_map(|(index, &item)| if item > 1.0 { Some(index) } else { None })
         .collect();
 
-    let infrv_array = infrv(&gibbs_mat, Axis(1));
+    let infrv_array = infrv(gibbs_mat, Axis(1));
     let mut infrv_sort: Vec<f64> = gibbs_nz.iter().map(|i| infrv_array[*i as usize]).collect();
     let n = infrv_sort.len();
     rgsl::sort::vectors::sort(&mut infrv_sort, 1, n);
@@ -681,7 +459,7 @@ pub fn get_threshold(
         .filter_map(|(index, &item)| if item > 1.0 { Some(index) } else { None })
         .collect();
 
-    let infrv_array = infrv(&gibbs_mat, Axis(1));
+    let infrv_array = infrv(gibbs_mat, Axis(1));
 
     let dat = gibbs_nz
         .iter()
@@ -729,7 +507,7 @@ pub fn get_threshold(
             if !endpoints_overdispersed(&infrv_array, infrv_quant, t1, t2) {
                 continue;
             }
-            let s = get_collapse_score(&gibbs_mat, &infrv_array, t1, t2);
+            let s = get_collapse_score(gibbs_mat, &infrv_array, t1, t2);
             // let s = get_collapse_score(&gibbs_mat, &infrv_array, t1, t2);
             // let s = get_variance_fold_change(&gibbs_mat, &infrv_array, t1, t2);
             // let s = get_infrv_fold_change(&gibbs_mat, &infrv_array, t1, t2);
@@ -756,9 +534,10 @@ pub fn get_threshold(
             .map(|s| s.to_f64().unwrap() - mean)
             .collect();
         let shifted_samples_pos: Vec<f64> = shifted_samples
-            .into_iter()
-            .filter(|&x| x >= 0.0)
-            .collect::<Vec<_>>();
+            .iter()
+            .map(|s| s.to_f64().unwrap() - mean)
+            .collect();
+
         let mid = shifted_samples_pos.len() / 2;
         let median = shifted_samples_pos[mid];
         //let median = sampled_infrv[sampled_infrv.len()/2].to_f64().unwrap();
@@ -823,29 +602,6 @@ pub fn get_variance_fold_change(
    varsum / (infa + infb + 1.)
 }
 */
-pub fn order_group_writer(
-    go_file: &mut File,
-    group_order: &[String],
-    groups: &HashMap<usize, Vec<usize>>,
-) -> Result<bool, io::Error> {
-    //let go_iter = group_order.iter();
-    for (group_id, group) in groups {
-        writeln!(go_file, "{}", group_order[*group_id])?;
-    }
-    Ok(true)
-}
-
-pub fn co_id_writer(
-    go_file: &mut File,
-    groups: &HashMap<usize, Vec<usize>>,
-    co_order: &[TreeNode],
-) -> Result<bool, io::Error> {
-    //let go_iter = group_order.iter();
-    for (group_id, _) in groups {
-        writeln!(go_file, "{}", co_order[*group_id].id)?;
-    }
-    Ok(true)
-}
 
 fn order_group(source: usize, target: usize, group_order: &mut [String]) {
     // if group_order[target].ends_with("p"){ //p is to say that this node has been target prior
@@ -868,7 +624,7 @@ fn order_group(source: usize, target: usize, group_order: &mut [String]) {
     //     }
     // }
 
-    let n_target = group_order[target].rsplit("_").collect::<Vec<_>>().len();
+    let n_target = group_order[target].rsplit('_').count();
     group_order[source] = if n_target > 1 {
         format!("{}gr{}", group_order[target], group_order[source])
     } else {
@@ -876,7 +632,12 @@ fn order_group(source: usize, target: usize, group_order: &mut [String]) {
     };
     //group_order[target] = format!("{}{}", source, "p");
 }
-#[allow(dead_code, clippy::too_many_arguments, clippy::cognitive_complexity)]
+#[allow(
+    dead_code,
+    clippy::too_many_arguments,
+    clippy::cognitive_complexity,
+    unused_assignments
+)]
 pub fn eq_experiment_to_graph(
     exp: &EqClassExperiment,
     gibbs_mat: &mut Array2<f64>,
@@ -898,8 +659,8 @@ pub fn eq_experiment_to_graph(
 ) -> pg::Graph<usize, EdgeInfo, petgraph::Undirected> {
     let start = Instant::now();
 
-    let txpmode: bool = genevec.len() > 0;
-    let asemode: bool = original_id_to_old_id_map.len() > 0;
+    let txpmode: bool = !genevec.is_empty();
+    let asemode: bool = !original_id_to_old_id_map.is_empty();
 
     println!("txp mode and ase mode {},{}", txpmode, asemode);
     println!("Creating partition refinery");
@@ -990,7 +751,6 @@ pub fn eq_experiment_to_graph(
     } else {
         infrv_array = infrv(gibbs_mat, Axis(1));
     }
-    let mut msg: String;
 
     if asemode {
         let mut allelic_collapses = 0;
@@ -1004,7 +764,6 @@ pub fn eq_experiment_to_graph(
 
                 for t in tlist.iter().skip(1) {
                     act_target = unionfind_struct.find(*t as usize);
-                    let par_source = unionfind_struct.find(source as usize); // parent of current source before union
                     act_source = source as usize;
                     let merge = unionfind_struct.union(source as usize, *t as usize);
                     if merge {
@@ -1060,8 +819,8 @@ pub fn eq_experiment_to_graph(
     let part_vec = part.iter().collect::<Vec<_>>();
     let mut golden_collapses = 0;
     let mut t_golden_collapses = 0;
-    let mut t_prev = vec![0];
-    'outer: for (_, p) in part_vec.iter().enumerate() {
+
+    for (_, p) in part_vec.iter().enumerate() {
         if p.len() > 1 {
             //println!("{:?}", p);
             if valid_transcripts[p[0]] {
@@ -1073,7 +832,7 @@ pub fn eq_experiment_to_graph(
                 tlist.sort_unstable();
                 let source = tlist[0];
                 let mut act_source: usize = source;
-                'inner: for t in tlist.iter().skip(1) {
+                for t in tlist.iter().skip(1) {
                     let target = *t;
                     let mut act_target = unionfind_struct.find(*t as usize); // parent of current target node
                     let par_source = unionfind_struct.find(source as usize); // parent of current source before union
@@ -1143,7 +902,7 @@ pub fn eq_experiment_to_graph(
 
     if !mean_inf {
         gibbs_mat_mean = gibbs_mat.mean_axis(Axis(1)).unwrap();
-        gibbs_mat_spread = spread(&gibbs_mat, Axis(1));
+        gibbs_mat_spread = spread(gibbs_mat, Axis(1));
     } else {
         gibbs_mat_mean = Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0] as usize);
         gibbs_mat_spread = Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0] as usize);
@@ -1276,15 +1035,15 @@ pub fn eq_experiment_to_graph(
                         None => {
                             // only add the edge if the correlation is sufficientl
                             // small
-                            let delta = match (mean_inf) {
-                                false => get_collapse_score(&gibbs_mat, &infrv_array, na, *nb),
+                            let delta = match mean_inf {
+                                false => get_collapse_score(gibbs_mat, &infrv_array, na, *nb),
                                 true => {
                                     let mut col_score = 0.0;
                                     for (_i, gb) in gibbs_mat_vec.iter().enumerate() {
                                         col_score +=
-                                            get_collapse_score(&gb, &infrv_array_vec[_i], na, *nb);
+                                            get_collapse_score(gb, &infrv_array_vec[_i], na, *nb);
                                     }
-                                    col_score = col_score / gibbs_mat_vec.len() as f64;
+                                    col_score /= gibbs_mat_vec.len() as f64;
                                     col_score
                                 }
                             };
@@ -1345,6 +1104,12 @@ pub fn eq_experiment_to_graph(
 }
 
 // find intersection
+#[allow(
+    dead_code,
+    unused_variables,
+    clippy::borrow_deref_ref,
+    clippy::match_like_matches_macro
+)]
 fn intersect<T: std::cmp::PartialOrd + std::cmp::Ord + Copy>(a: &[T], b: &[T]) -> std::vec::Vec<T> {
     let mut ia = a.iter();
     let mut ib = b.iter();
@@ -1355,14 +1120,10 @@ fn intersect<T: std::cmp::PartialOrd + std::cmp::Ord + Copy>(a: &[T], b: &[T]) -
         if *(va.unwrap()) < *(vb.unwrap()) {
             va = ia.next();
         } else {
-            // let not_less_or_equal = match (*vb.unwrap()).partial_cmp(&*(va.unwrap())) {
-            //     None | Some(Ordering::Equal) | Some(Ordering::Greater) => true,
-            //     _ => false,
-            // };
-            let not_less_or_equal = matches!(
-                (*vb.unwrap()).partial_cmp(&*(va.unwrap())),
-                None | Some(Ordering::Equal) | Some(Ordering::Greater)
-            );
+            let not_less_or_equal = match (*vb.unwrap()).partial_cmp(&*(va.unwrap())) {
+                None | Some(Ordering::Equal) | Some(Ordering::Greater) => true,
+                _ => false,
+            };
             if not_less_or_equal {
                 out.push(*(va.unwrap()));
                 va = ia.next();
@@ -1374,7 +1135,12 @@ fn intersect<T: std::cmp::PartialOrd + std::cmp::Ord + Copy>(a: &[T], b: &[T]) -
     out
 }
 
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    unused_variables,
+    clippy::borrow_deref_ref,
+    clippy::match_like_matches_macro
+)]
 fn union<T: std::cmp::PartialOrd + Copy>(a: &[T], b: &[T]) -> std::vec::Vec<T> {
     let mut ia = a.iter();
     let mut ib = b.iter();
@@ -1387,14 +1153,10 @@ fn union<T: std::cmp::PartialOrd + Copy>(a: &[T], b: &[T]) -> std::vec::Vec<T> {
                 out.push(*(va.unwrap()));
                 va = ia.next();
             } else {
-                let not_less_or_equal = matches!(
-                    (*vb.unwrap()).partial_cmp(&*(va.unwrap())),
-                    None | Some(Ordering::Greater)
-                );
-                // let not_less_or_equal = match (*vb.unwrap()).partial_cmp(&*(va.unwrap())) {
-                //     None | Some(Ordering::Greater) => true,
-                //     _ => false,
-                // };
+                let not_less_or_equal = match (*vb.unwrap()).partial_cmp(&*(va.unwrap())) {
+                    None | Some(Ordering::Greater) => true,
+                    _ => false,
+                };
                 if not_less_or_equal {
                     out.push(*(va.unwrap()));
                     va = ia.next();
@@ -1454,7 +1216,6 @@ pub fn work_on_component(
     thr: f64,
     infrv_quant: f64,
     cfile: &mut File,
-    group_order: &mut [String],
     collapse_order: &mut [TreeNode],
     mean_inf: bool,
 ) {
@@ -1574,7 +1335,7 @@ pub fn work_on_component(
                 // v. unionfind_array
 
                 let mut act_target = unionfind_struct.find(target as usize);
-                let mut par_source = unionfind_struct.find(source as usize); // parent of current source before union
+                let par_source = unionfind_struct.find(source as usize); // parent of current source before union
                 let merge = unionfind_struct.union(source as usize, target);
                 if merge {
                     let act_source = unionfind_struct.find(source as usize) as usize;
@@ -1612,14 +1373,10 @@ pub fn work_on_component(
                 }
 
                 // update correlation for (u*v) to new and existing neighbors
-                let mut source_adj: Vec<usize> = og
-                    .neighbors(source_node)
-                    .map(|n| n.clone().index())
-                    .collect();
-                let mut target_adj: Vec<usize> = og
-                    .neighbors(target_node)
-                    .map(|n| n.clone().index())
-                    .collect();
+                let mut source_adj: Vec<usize> =
+                    og.neighbors(source_node).map(|n| n.index()).collect();
+                let mut target_adj: Vec<usize> =
+                    og.neighbors(target_node).map(|n| n.index()).collect();
 
                 source_adj.sort_unstable();
                 target_adj.sort_unstable();
@@ -1643,15 +1400,15 @@ pub fn work_on_component(
                     let mut u_to_x_info_inner = og.edge_weight_mut(u_to_x_inner).unwrap();
                     let curr_state = u_to_x_info_inner.state;
 
-                    let delta = match (mean_inf) {
-                        false => get_collapse_score(&gibbs_mat, &infrv_array, source, *x),
+                    let delta = match mean_inf {
+                        false => get_collapse_score(gibbs_mat, &infrv_array, source, *x),
                         true => {
                             let mut col_score = 0.0;
                             for (_i, gb) in gibbs_mat_vec.iter().enumerate() {
                                 col_score +=
-                                    get_collapse_score(&gb, &infrv_array_vec[_i], source, *x);
+                                    get_collapse_score(gb, &infrv_array_vec[_i], source, *x);
                             }
-                            col_score = col_score / gibbs_mat_vec.len() as f64;
+                            col_score /= gibbs_mat_vec.len() as f64;
                             col_score
                         }
                     };
@@ -1701,15 +1458,15 @@ pub fn work_on_component(
                     let v_to_x_count = v_to_x_info_inner.count;
                     let v_to_x_eqlist = &v_to_x_info_inner.eqlist.to_vec();
 
-                    let delta = match (mean_inf) {
-                        false => get_collapse_score(&gibbs_mat, &infrv_array, source, *x),
+                    let delta = match mean_inf {
+                        false => get_collapse_score(gibbs_mat, &infrv_array, source, *x),
                         true => {
                             let mut col_score = 0.0;
                             for (_i, gb) in gibbs_mat_vec.iter().enumerate() {
                                 col_score +=
-                                    get_collapse_score(&gb, &infrv_array_vec[_i], source, *x);
+                                    get_collapse_score(gb, &infrv_array_vec[_i], source, *x);
                             }
-                            col_score = col_score / gibbs_mat_vec.len() as f64;
+                            col_score /= gibbs_mat_vec.len() as f64;
                             col_score
                         }
                     };
@@ -1806,15 +1563,15 @@ pub fn work_on_component(
 
                     let final_count = tot_current_count - sum;
 
-                    let delta = match (mean_inf) {
-                        false => get_collapse_score(&gibbs_mat, &infrv_array, source, *x),
+                    let delta = match mean_inf {
+                        false => get_collapse_score(gibbs_mat, &infrv_array, source, *x),
                         true => {
                             let mut col_score = 0.0;
                             for (_i, gb) in gibbs_mat_vec.iter().enumerate() {
                                 col_score +=
-                                    get_collapse_score(&gb, &infrv_array_vec[_i], source, *x);
+                                    get_collapse_score(gb, &infrv_array_vec[_i], source, *x);
                             }
-                            col_score = col_score / gibbs_mat_vec.len() as f64;
+                            col_score /= gibbs_mat_vec.len() as f64;
                             col_score
                         }
                     };
