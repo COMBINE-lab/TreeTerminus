@@ -52,7 +52,7 @@ target/release/treeterminus consensus -d <salmon_dir> -o <out_dir>
 ```
 The inputs to the `-d` and `-o` flags are the same as those defined for the `group` step that was used to generate the **Mean** tree.
 
-The information about the other arguments that can be provided to `group`, can be obtained by running:
+The information about the other arguments that can be provided to `consensus`, can be obtained by running:
 ```
 target/release/treeterminus consensus -h
 ```
