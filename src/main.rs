@@ -23,6 +23,8 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use serde_json::json;
 
+use crate::salmon_types::ConsensusFileList;
+
 // Name of the program, to be used in diagnostic messages.
 static PROGRAM_NAME: &str = "treeterminus";
 
@@ -103,7 +105,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
                 .collect::<Vec<_>>()[0]
                 .to_string();
             if x == "quant.sf" {
-                panic!("A directory above this level is required");
+                panic!("A directory above this level is required or flag mean_inf should be set to false");
             }
         }
         let sal_dir_paths = read_dir(dname.clone())?
@@ -472,8 +474,14 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     let mut gfile = File::create(file_list_out.group_file).expect("could not create groups.txt");
     let mut co_file = File::create(file_list_out.collapse_order_file)
         .expect("could not create collapse order file");
-    let mut nwk_file =
-        File::create(file_list_out.group_nwk_file).expect("could not create group order file");
+    let nwk_path = match mean_inf {
+        true => {
+            let cons = ConsensusFileList::new(prefix_path.clone());
+            cons.cons_nwk_file
+        }
+        false => file_list_out.group_nwk_file,
+    };
+    let mut nwk_file = File::create(nwk_path).expect("could not create group write file");
     let _write = util::group_writer(&mut gfile, &groups);
     let _write = util::collapse_order_writer(&mut co_file, &mut nwk_file, &groups, &collapse_order);
 
