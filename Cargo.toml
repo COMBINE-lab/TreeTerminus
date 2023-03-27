@@ -1,9 +1,11 @@
 [package]
 name = "treeterminus"
 version = "0.1.0"
-authors = ["Rob Patro <rob@cs.umd.edu>", "Noor Pratap Singh <npsingh@umd.edu>"]
+authors = ["Noor Pratap Singh <npsingh@umd.edu>", "Rob Patro <rob@cs.umd.edu>"]
 edition = "2021"
 
+[build-dependencies]
+cc="1.0"
 
 [dependencies]
 GSL = "4.0"

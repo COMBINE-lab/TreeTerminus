@@ -9,8 +9,15 @@ extern crate serde_json;
 extern crate serde_pickle;
 extern crate serde_stacker;
 
+use std::ffi::CString;
+use std::os::raw::{c_char, c_int};
+
 use crate::binary_tree::{get_binary_rooted_newick_string, sort_group_id, TreeNode};
 use crate::salmon_types::{ConsensusFileList, FileList};
+
+extern "C" {
+    pub fn run_cons(argsc:c_int, argsv:*const *const c_char) -> c_int;
+}
 
 #[allow(unused_variables)]
 fn create_union_find(g: &[String], ntxps: usize) -> UnionFind<usize> {
@@ -201,29 +208,48 @@ fn write_file(f: &mut File, st: String) -> Result<bool, io::Error> {
 fn get_cons(out: &String, samp_trees: &[String]) -> String {
     let dir = PathBuf::from(out);
     let inp_nwk = dir.as_path().join("inp_tree.nwk");
+    let out_nwk = dir.as_path().join("out_tree.nwk");
 
-    let mut f_inp = File::create(inp_nwk).expect("could not create input newick file");
+    let mut f_inp = File::create(inp_nwk.clone()).expect("could not create input newick file");
     for g in samp_trees.iter() {
         let _t = write_file(&mut f_inp, g.clone());
     }
-    // println!("{:?}", samp_trees);
+
+    let mut args: Vec<CString> = Vec::new();
+    args.push(CString::new(inp_nwk.as_path().display().to_string()).unwrap());
+    args.push(CString::new(out_nwk.as_path().display().to_string()).unwrap());
+    args.push(CString::new("mre").unwrap());
+    args.push(CString::new("0").unwrap());
+    args.push(CString::new("0").unwrap());
+    args.push(CString::new("0").unwrap());
+    args.push(CString::new("0").unwrap());
+
+    let arg_ptrs: Vec<*const c_char> = args.iter().map(|s| s.as_ptr()).collect();
+    let args_len: c_int = arg_ptrs.len() as c_int;
+    unsafe{run_cons(args_len, arg_ptrs.as_ptr())};
+
+    // // println!("{:?}", samp_trees);
+    // let (_code, _output, _error) = run_script::run_script!(
+    //     r#"
+    //     ./phylip_consensus/consense < phylip_consensus/input
+    //      exit 0
+    //      "#
+    // )
+    // .unwrap();
+    let cons_nwk = read_to_string(out_nwk.clone()).expect("Something went wrong reading the file");
     let (_code, _output, _error) = run_script::run_script!(
-        r#"
-        ./phylip_consensus/consense < phylip_consensus/input
-         exit 0
-         "#
+        &format!("rm {}", out_nwk.as_path().display().to_string())
     )
     .unwrap();
-    let cons_nwk = read_to_string("outtree").expect("Something went wrong reading the file");
     // println!("{}", cons_nwk);
-    let (_code, _output, _error) = run_script::run_script!(
-        r#"
-        rm out*
+    // let (_code, _output, _error) = run_script::run_script!(
+    //     r#"
+    //     rm out*
         
-            exit 0
-            "#
-    )
-    .unwrap();
+    //         exit 0
+    //         "#
+    // )
+    // .unwrap();
     cons_nwk
 }
 
@@ -270,16 +296,16 @@ pub fn use_phylip(dir_paths: &[&str], out: &String, all_groups: &[String], ntxps
         File::create(file_list_out.cons_nwk_file).expect("could not create cluster newick file");
 
     let inp_nwk_s = format!("{}/inp_tree.nwk", out.clone());
-    let (_code, _output, _error) =
-        run_script::run_script!(&format!("echo {}  > phylip_consensus/input", inp_nwk_s)).unwrap();
-    let (_code, _output, _error) = run_script::run_script!(
-        r#"
-        echo "R Yes" >> phylip_consensus/input
-        echo "Y"  >> phylip_consensus/input
-         exit 0
-         "#
-    )
-    .unwrap();
+    // let (_code, _output, _error) =
+    //     run_script::run_script!(&format!("echo {}  > phylip_consensus/input", inp_nwk_s)).unwrap();
+    // let (_code, _output, _error) = run_script::run_script!(
+    //     r#"
+    //     echo "R Yes" >> phylip_consensus/input
+    //     echo "Y"  >> phylip_consensus/input
+    //      exit 0
+    //      "#
+    // )
+    // .unwrap();
     for (merged_group, old_group) in mg {
         let group_inf = get_group_trees(&merged_group, &old_group, &samp_group_trees); //
         let _t = write_file(&mut mg_file, group_inf.0);
@@ -292,10 +318,7 @@ pub fn use_phylip(dir_paths: &[&str], out: &String, all_groups: &[String], ntxps
         let _t = write_file(&mut clust_nwk_file, get_cons(out, &group_inf.1));
     }
     let (_code, _output, _error) = run_script::run_script!(
-        r#"
-        rm phylip_consensus/input
-            exit 0
-            "#
+        &format!("rm {}", inp_nwk_s)
     )
     .unwrap();
 }
