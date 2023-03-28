@@ -6,5 +6,6 @@ fn main() {
         .file("phylip_src/phylip.c")
         .include("phylip_src")
         .flag("-lm")
+        .flag("-w")
         .compile("phylip_consense");
 }
