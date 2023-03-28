@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::f64;
 use std::fs::*;
 use std::io::prelude::*;
@@ -61,50 +61,31 @@ fn conv_names(g: &str, tnames: &[String]) -> String {
     s.join(",")
 }
 
-pub trait MapTrait {
-    fn bipart_writer(&self, file: &mut File, tnames: &[String]) -> Result<bool, io::Error>;
-}
+// pub trait MapTrait {
+//     fn bipart_writer(&self, file: &mut File, tnames: &[String]) -> Result<bool, io::Error>;
+// }
 
-impl MapTrait for HashMap<String, HashMap<String, u32>> {
-    fn bipart_writer(&self, g_bp_file: &mut File, tnames: &[String]) -> Result<bool, io::Error> {
-        //let l = group_bipart.len();
-        //let mut i = 0;
-        for (group_id, bpart_hash) in self {
-            writeln!(
-                g_bp_file,
-                "gr\t{}\t{}",
-                conv_names(group_id, tnames),
-                bpart_hash.len()
-            )?;
-            let mut v = Vec::from_iter(bpart_hash);
-            v.sort_by(|&(_, a), &(_, b)| b.cmp(a));
-            for (bpart, count) in v {
-                writeln!(g_bp_file, "{}\t{}", conv_names(bpart, tnames), count)?;
-            }
+// impl MapTrait for HashMap<String, HashMap<String, u32>> {
+pub fn bipart_writer(part_hash:&HashMap<String, HashMap<String, u32>>, g_bp_file: &mut File, tnames: &[String]) -> Result<bool, io::Error> {
+    //let l = group_bipart.len();
+    //let mut i = 0;
+    for (group_id, bpart_hash) in part_hash {
+        writeln!(
+            g_bp_file,
+            "gr\t{}\t{}",
+            conv_names(group_id, tnames),
+            bpart_hash.len()
+        )?;
+        let mut v = Vec::from_iter(bpart_hash);
+        v.sort_by(|&(_, a), &(_, b)| b.cmp(a));
+        for (bpart, count) in v {
+            writeln!(g_bp_file, "{}\t{}", conv_names(bpart, tnames), count)?;
         }
-        Ok(true)
     }
+    Ok(true)
 }
-impl MapTrait for HashMap<String, BTreeMap<String, u32>> {
-    fn bipart_writer(&self, g_bp_file: &mut File, tnames: &[String]) -> Result<bool, io::Error> {
-        //let l = group_bipart.len();
-        //let mut i = 0;
-        for (group_id, bpart_hash) in self {
-            writeln!(
-                g_bp_file,
-                "gr\t{}\t{}",
-                conv_names(group_id, tnames),
-                bpart_hash.len()
-            )?;
-            let mut v = Vec::from_iter(bpart_hash);
-            v.sort_by(|&(_, a), &(_, b)| b.cmp(a));
-            for (bpart, count) in v {
-                writeln!(g_bp_file, "{}\t{}", conv_names(bpart, tnames), count)?;
-            }
-        }
-        Ok(true)
-    }
-}
+// }
+
 // pub fn bipart_writer<T:mapTrait>(
 //     g_bp_file: &mut File,
 //     group_bipart: &T
@@ -232,7 +213,7 @@ pub fn read_gibbs(f: &std::path::Path, mi: &MetaInfo, gibbs_mat: &mut na::DMatri
 
     let nt = mi.num_valid_targets as usize;
     for i in 0..(mi.num_bootstraps) {
-        let mut data: Vec<u8> = vec![0; (nt * 8) as usize];
+        let mut data: Vec<u8> = vec![0; nt * 8];
         br.read_exact(&mut data[..])
             .expect("could not read from inferential replicate file");
         let mut floats: na::DVector<f64> = na::DVector::<f64>::from_element(nt, 0.0); // Vec<f64> = vec![0.0_f64; nt];
@@ -252,7 +233,7 @@ pub fn read_gibbs_array(f: &std::path::Path, mi: &MetaInfo, gibbs_mat: &mut Arra
 
     let nt = mi.num_valid_targets as usize;
     for i in 0..(mi.num_bootstraps) {
-        let mut data: Vec<u8> = vec![0; (nt * 8) as usize];
+        let mut data: Vec<u8> = vec![0; nt * 8];
         br.read_exact(&mut data[..])
             .expect("could not read from inferential replicate file");
         let mut floats = vec![0.0; nt]; // Vec<f64> = vec![0.0_f64; nt];
@@ -429,7 +410,7 @@ pub fn get_infrv_percentile(gibbs_mat: &Array2<f64>, p: f64) -> f64 {
         .collect();
 
     let infrv_array = infrv(gibbs_mat, Axis(1));
-    let mut infrv_sort: Vec<f64> = gibbs_nz.iter().map(|i| infrv_array[*i as usize]).collect();
+    let mut infrv_sort: Vec<f64> = gibbs_nz.iter().map(|i| infrv_array[*i]).collect();
     let n = infrv_sort.len();
     rgsl::sort::vectors::sort(&mut infrv_sort, 1, n);
     rgsl::statistics::quantile_from_sorted_data(&infrv_sort, 1, infrv_sort.len(), p)
@@ -463,12 +444,7 @@ pub fn get_threshold(
 
     let dat = gibbs_nz
         .iter()
-        .map(|i| {
-            format!(
-                "{}\t{}",
-                gibbs_mat_mean[*i as usize], infrv_array[*i as usize]
-            )
-        })
+        .map(|i| format!("{}\t{}", gibbs_mat_mean[*i], infrv_array[*i]))
         .join("\n");
     let infrv_log = file_list.prefix.as_path().join("infrv.log");
     std::fs::write(infrv_log, dat).expect("could not write to the infrv.log");
@@ -492,11 +468,11 @@ pub fn get_threshold(
         let die_range = Uniform::new(0, gibbs_nz.len());
         let mut roll_die = die_range.sample_iter(&mut rng);
 
-        let mut sampled_infrv = vec![OrderedFloat(0.0); starting_num_samples as usize];
+        let mut sampled_infrv = vec![OrderedFloat(0.0); starting_num_samples];
         let mut dice_iter = 0_usize;
         let mut mean_sum = 0.0_f64;
 
-        while dice_iter < starting_num_samples as usize {
+        while dice_iter < starting_num_samples {
             let i1 = roll_die.next().unwrap();
             let mut i2 = roll_die.next().unwrap();
             while i1 == i2 {
@@ -737,8 +713,8 @@ pub fn eq_experiment_to_graph(
 
     // a blanket merge in asemode
     let mut infrv_array = match mean_inf {
-        true => Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0] as usize),
-        false => Array1::<f64>::zeros(gibbs_mat.shape()[0] as usize),
+        true => Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0]),
+        false => Array1::<f64>::zeros(gibbs_mat.shape()[0]),
     };
     let mut infrv_array_vec: Vec<Array1<f64>> = Vec::new();
     if mean_inf {
@@ -763,20 +739,20 @@ pub fn eq_experiment_to_graph(
                 let mut act_target: usize;
 
                 for t in tlist.iter().skip(1) {
-                    act_target = unionfind_struct.find(*t as usize);
-                    act_source = source as usize;
-                    let merge = unionfind_struct.union(source as usize, *t as usize);
+                    act_target = unionfind_struct.find(*t);
+                    act_source = source;
+                    let merge = unionfind_struct.union(source, *t);
                     if merge {
-                        act_source = unionfind_struct.find(source as usize) as usize;
+                        act_source = unionfind_struct.find(source);
 
                         if act_source == act_target {
-                            act_target = source as usize;
+                            act_target = source;
                         }
-                        order_group(source as usize, *t as usize, group_order);
+                        order_group(source, *t, group_order);
                         //println!("{}",collapse_order[*t as usize].id);
-                        collapse_order[act_source as usize] = TreeNode::create_group(
-                            collapse_order[act_source as usize].clone(),
-                            collapse_order[act_target as usize].clone(),
+                        collapse_order[act_source] = TreeNode::create_group(
+                            collapse_order[act_source].clone(),
+                            collapse_order[act_target].clone(),
                         );
                         let target = *t;
 
@@ -793,8 +769,8 @@ pub fn eq_experiment_to_graph(
                             for (_i, gb) in gibbs_mat_vec.iter_mut().enumerate() {
                                 // let infrv = infrv(&gb, Axis(1));
                                 // infrv_array += infrv
-                                let to_add = gb.index_axis(Axis(0), target as usize).to_owned();
-                                let mut s = gb.slice_mut(s![source as usize, ..]);
+                                let to_add = gb.index_axis(Axis(0), target).to_owned();
+                                let mut s = gb.slice_mut(s![source, ..]);
                                 s += &to_add;
                                 infrv_array_vec[_i][source] = infrv_1d(s.view());
                                 infrv_array[source] =
@@ -802,8 +778,8 @@ pub fn eq_experiment_to_graph(
                             }
                             // infrv_array[source] = infrv_array[source]/gibbs_mat_vec.len() as f64;
                         } else {
-                            let to_add = gibbs_mat.index_axis(Axis(0), target as usize).to_owned();
-                            let mut s = gibbs_mat.slice_mut(s![source as usize, ..]);
+                            let to_add = gibbs_mat.index_axis(Axis(0), target).to_owned();
+                            let mut s = gibbs_mat.slice_mut(s![source, ..]);
                             s += &to_add;
                             infrv_array[source] = infrv_1d(s.view());
                         }
@@ -834,19 +810,19 @@ pub fn eq_experiment_to_graph(
                 let mut act_source: usize = source;
                 for t in tlist.iter().skip(1) {
                     let target = *t;
-                    let mut act_target = unionfind_struct.find(*t as usize); // parent of current target node
-                    let par_source = unionfind_struct.find(source as usize); // parent of current source before union
-                    let merge = unionfind_struct.union(source as usize, *t as usize);
+                    let mut act_target = unionfind_struct.find(*t); // parent of current target node
+                    let par_source = unionfind_struct.find(source); // parent of current source before union
+                    let merge = unionfind_struct.union(source, *t);
 
                     if merge {
                         t_golden_collapses += 1;
-                        act_source = unionfind_struct.find(source as usize);
+                        act_source = unionfind_struct.find(source);
                         if act_source == act_target {
                             act_target = par_source;
                         }
-                        collapse_order[act_source as usize] = TreeNode::create_group(
-                            collapse_order[act_source as usize].clone(),
-                            collapse_order[act_target as usize].clone(),
+                        collapse_order[act_source] = TreeNode::create_group(
+                            collapse_order[act_source].clone(),
+                            collapse_order[act_target].clone(),
                         );
                         let msg = format!(
                             "{}\t{}\t{}\t{}\n",
@@ -858,8 +834,8 @@ pub fn eq_experiment_to_graph(
                         infrv_array[source] = 0.0;
                         if mean_inf {
                             for (_i, gb) in gibbs_mat_vec.iter_mut().enumerate() {
-                                let to_add = gb.index_axis(Axis(0), target as usize).to_owned();
-                                let mut s = gb.slice_mut(s![source as usize, ..]);
+                                let to_add = gb.index_axis(Axis(0), target).to_owned();
+                                let mut s = gb.slice_mut(s![source, ..]);
                                 s += &to_add;
                                 infrv_array_vec[_i][source] = infrv_1d(s.view());
                                 infrv_array[source] =
@@ -867,8 +843,8 @@ pub fn eq_experiment_to_graph(
                             }
                             // infrv_array[source] = infrv_array[source]/gibbs_mat_vec.len() as f64;
                         } else {
-                            let to_add = gibbs_mat.index_axis(Axis(0), target as usize).to_owned();
-                            let mut s = gibbs_mat.slice_mut(s![source as usize, ..]);
+                            let to_add = gibbs_mat.index_axis(Axis(0), target).to_owned();
+                            let mut s = gibbs_mat.slice_mut(s![source, ..]);
                             s += &to_add;
                             infrv_array[source] = infrv_1d(s.view());
                         }
@@ -904,8 +880,8 @@ pub fn eq_experiment_to_graph(
         gibbs_mat_mean = gibbs_mat.mean_axis(Axis(1)).unwrap();
         gibbs_mat_spread = spread(gibbs_mat, Axis(1));
     } else {
-        gibbs_mat_mean = Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0] as usize);
-        gibbs_mat_spread = Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0] as usize);
+        gibbs_mat_mean = Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0]);
+        gibbs_mat_spread = Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0]);
         for gb in gibbs_mat_vec.iter() {
             let mean = gb.mean_axis(Axis(1)).unwrap();
             let spread = spread(gb, Axis(1));
@@ -980,7 +956,7 @@ pub fn eq_experiment_to_graph(
 
         let retained: std::vec::Vec<usize> = (0..ns.len())
             .filter_map(|j| {
-                if ws[j as usize] >= thresh {
+                if ws[j] >= thresh {
                     Some(ns[j] as usize)
                 } else {
                     None
@@ -989,7 +965,7 @@ pub fn eq_experiment_to_graph(
             .collect();
 
         for a in 0..retained.len() {
-            let mut na = retained[a] as usize;
+            let mut na = retained[a];
             let na_root = unionfind_struct.find(na);
 
             if na_root != na {
@@ -997,7 +973,7 @@ pub fn eq_experiment_to_graph(
             }
 
             for nb in retained.iter().skip(a + 1) {
-                let mut nbd = *nb as usize;
+                let mut nbd = *nb;
 
                 if txpmode {
                     let gene_a = genevec[na];
@@ -1221,8 +1197,8 @@ pub fn work_on_component(
 ) {
     // make a set of edges to be visited
     let mut infrv_array = match mean_inf {
-        true => Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0] as usize),
-        false => Array1::<f64>::zeros(gibbs_mat.shape()[0] as usize),
+        true => Array1::<f64>::zeros(gibbs_mat_vec[0].shape()[0]),
+        false => Array1::<f64>::zeros(gibbs_mat.shape()[0]),
     };
     let mut infrv_array_vec: Vec<Array1<f64>> = Vec::new();
     if mean_inf {
@@ -1334,19 +1310,19 @@ pub fn work_on_component(
                 // iv. heap
                 // v. unionfind_array
 
-                let mut act_target = unionfind_struct.find(target as usize);
-                let par_source = unionfind_struct.find(source as usize); // parent of current source before union
-                let merge = unionfind_struct.union(source as usize, target);
+                let mut act_target = unionfind_struct.find(target);
+                let par_source = unionfind_struct.find(source); // parent of current source before union
+                let merge = unionfind_struct.union(source, target);
                 if merge {
-                    let act_source = unionfind_struct.find(source as usize) as usize;
+                    let act_source = unionfind_struct.find(source);
                     if act_source == act_target {
                         act_target = par_source;
                     }
                     //order_group(source as usize, *t as usize, group_order);
                     //println!("{}",collapse_order[*t as usize].id);
-                    collapse_order[act_source as usize] = TreeNode::create_group(
-                        collapse_order[act_source as usize].clone(),
-                        collapse_order[act_target as usize].clone(),
+                    collapse_order[act_source] = TreeNode::create_group(
+                        collapse_order[act_source].clone(),
+                        collapse_order[act_target].clone(),
                     );
                 }
 
@@ -1354,8 +1330,8 @@ pub fn work_on_component(
                     infrv_array[source] = 0.0;
                     gibbs_mat_mean[source] = 0.0;
                     for (_i, gb) in gibbs_mat_vec.iter_mut().enumerate() {
-                        let to_add = gb.index_axis(Axis(0), target as usize).to_owned();
-                        let mut s = gb.slice_mut(s![source as usize, ..]);
+                        let to_add = gb.index_axis(Axis(0), target).to_owned();
+                        let mut s = gb.slice_mut(s![source, ..]);
                         s += &to_add;
                         infrv_array_vec[_i][source] = infrv_1d(s.view());
                         infrv_array[source] = infrv_array[source].max(infrv_array_vec[_i][source]);
@@ -1365,8 +1341,8 @@ pub fn work_on_component(
                     // infrv_array[source] = infrv_array[source]/gibbs_mat_vec.len() as f64;
                     // gibbs_mat_mean[source] /= gibbs_mat_vec.len() as f64;
                 } else {
-                    let to_add = gibbs_mat.index_axis(Axis(0), target as usize).to_owned();
-                    let mut s = gibbs_mat.slice_mut(s![source as usize, ..]);
+                    let to_add = gibbs_mat.index_axis(Axis(0), target).to_owned();
+                    let mut s = gibbs_mat.slice_mut(s![source, ..]);
                     s += &to_add;
                     infrv_array[source] = infrv_1d(s.view());
                     gibbs_mat_mean[source] = s.sum() / (s.len() as f64);
@@ -1537,7 +1513,7 @@ pub fn work_on_component(
 
                     let mut sum = 0_u32;
                     for i in intersecting_eqlist.iter() {
-                        sum += eq_class_count[*i as usize];
+                        sum += eq_class_count[*i];
                     }
                     let tot_current_count = v_to_x_count + u_to_x_info.count;
 
