@@ -1,9 +1,11 @@
 [package]
 name = "treeterminus"
-version = "0.1.0"
-authors = ["Rob Patro <rob@cs.umd.edu>", "Noor Pratap Singh <npsingh@umd.edu>"]
+version = "0.2.0"
+authors = ["Noor Pratap Singh <npsingh@umd.edu>", "Rob Patro <rob@cs.umd.edu>"]
 edition = "2021"
 
+[build-dependencies]
+cc="1.0"
 
 [dependencies]
 GSL = "4.0"
@@ -12,7 +14,7 @@ ndarray-stats = "0.3.0"
 pretty_env_logger = "0.3.1"
 clap = "^2.33.0"
 log = "^0.4.8"
-log4rs = "^0.9.0"
+log4rs = "^1.2.0"
 petgraph = "^0.4.13"
 nalgebra = "^0.18"
 csv = "^1.1.1"

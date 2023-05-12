@@ -170,7 +170,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
             )));
             #[allow(unused_assignments)]
             if _i == 0 {
-                gibbs_mat_mean = Array1::<f64>::zeros(gibbs_array_vec[0].shape()[0] as usize);
+                gibbs_mat_mean = Array1::<f64>::zeros(gibbs_array_vec[0].shape()[0]);
                 x = x_vec[0].clone();
             }
             util::read_gibbs_array(
@@ -567,7 +567,7 @@ fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         );
         let mut bipart_file = File::create(file_list_out.group_bp_splits_file)
             .expect("could not create group bp splits");
-        let _f = util::MapTrait::bipart_writer(&dir_bipart_counter, &mut bipart_file, &tnames);
+        let _f = util::bipart_writer(&dir_bipart_counter, &mut bipart_file, &tnames);
     }
     let all_groups: Vec<String> = bipart_counter.keys().cloned().collect();
     collapse::use_phylip(&dir_paths, &prefix, &all_groups, ntxps);
