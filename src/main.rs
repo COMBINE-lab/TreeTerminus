@@ -92,8 +92,8 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         .parse::<f64>()
         .expect("could not parse inf percentile");
 
-    let red_quant = sub_m
-        .value_of("red_quant")
+    let red_perc = sub_m
+        .value_of("red_perc")
         .unwrap()
         .parse::<f64>()
         .expect("could not parse reduction in inferential variance");
@@ -355,11 +355,11 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     let thr = match thr_bool {
         true => {
             if !mean_inf {
-                util::get_threshold(&gibbs_array, p, seed, &file_list_out, red_quant)
+                util::get_threshold(&gibbs_array, p, seed, &file_list_out, red_perc)
             } else {
                 let mut thresh = 0.0;
                 for gb in gibbs_array_vec.iter() {
-                    thresh += util::get_threshold(gb, p, seed, &file_list_out, red_quant);
+                    thresh += util::get_threshold(gb, p, seed, &file_list_out, red_perc);
                 }
                 thresh / (gibbs_array_vec.len() as f64)
             }
@@ -466,7 +466,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         "allele_mode":asemode,
         "txp_mode":txpmode,
         "inf_perc":inf_perc,
-        "red_quant":red_quant,
+        "red_perc":red_perc,
         "p":p,
         "thr":thr,
         "ntxps":eq_class.ntarget,
@@ -675,8 +675,8 @@ fn main() -> io::Result<()> {
                 .help("inferential variance percentile threshold that determines whether a transcript will be considered for grouping [0-1]")
             )
             .arg(
-                Arg::with_name("red_quant")
-                .long("red_quant")
+                Arg::with_name("red_perc")
+                .long("red_perc")
                 .takes_value(true)
                 .default_value("0.025")
                 .help("Reduction in inferential variance percentile threshold that determines to detemine if transcripts/groups should be aggregated [0,1]")
