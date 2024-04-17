@@ -1,6 +1,6 @@
 [package]
 name = "treeterminus"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Noor Pratap Singh <npsingh@umd.edu>", "Rob Patro <rob@cs.umd.edu>"]
 edition = "2021"
 
@@ -39,6 +39,7 @@ assert_cmd = "0.12.0"
 serde-pickle = "0.6"
 serde_stacker = "0.1"
 run_script = "^0.7.0"
+statrs = "0.16.0"
 
 [dev-dependencies]
 predicates = "1.0.2"

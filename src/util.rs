@@ -27,7 +27,9 @@ use refinery::Partition;
 use crate::binary_tree::{get_binary_rooted_newick_string, sort_group_id, TreeNode};
 use crate::salmon_types::{EdgeInfo, EqClassExperiment, FileList, MetaInfo, TxpRecord};
 use flate2::read::GzDecoder;
+use statrs::distribution::{ContinuousCDF, Normal};
 use std::iter::FromIterator;
+
 // use flate2::write::GzEncoder;
 // use flate2::Compression;
 
@@ -66,7 +68,11 @@ fn conv_names(g: &str, tnames: &[String]) -> String {
 // }
 
 // impl MapTrait for HashMap<String, HashMap<String, u32>> {
-pub fn bipart_writer(part_hash:&HashMap<String, HashMap<String, u32>>, g_bp_file: &mut File, tnames: &[String]) -> Result<bool, io::Error> {
+pub fn bipart_writer(
+    part_hash: &HashMap<String, HashMap<String, u32>>,
+    g_bp_file: &mut File,
+    tnames: &[String],
+) -> Result<bool, io::Error> {
     //let l = group_bipart.len();
     //let mut i = 0;
     for (group_id, bpart_hash) in part_hash {
@@ -287,7 +293,7 @@ pub fn get_map_bw_ent(
     let mut ent2_map = HashMap::<String, usize>::new();
     *ent1_ent2map = vec![0; tnames.len()];
     let mut j = 0;
-    for (_i, l) in buf_reader.lines().enumerate() {
+    for l in buf_reader.lines() {
         let s = l.expect("Can't read line");
         let mut iter = s.split_ascii_whitespace();
         let ent1: String = iter.next().expect("Txp/Allele name").to_string();
@@ -325,7 +331,7 @@ pub fn get_t2g(
     let mut genenames = Vec::<String>::new();
 
     let mut gene_id = 0;
-    for (_i, l) in buf_reader.lines().enumerate() {
+    for l in buf_reader.lines() {
         let s = l.expect("Can't read line");
         let mut iter = s.split_ascii_whitespace();
         let transcript: String = iter.next().expect("expect transcript name").to_string();
@@ -348,7 +354,7 @@ pub fn group_reader(filename: &std::path::Path) -> Vec<Vec<usize>> {
     let buf_reader = BufReader::new(file);
 
     let mut groups = Vec::new();
-    for (_i, l) in buf_reader.lines().enumerate() {
+    for l in buf_reader.lines() {
         let s = l.unwrap();
         let v: Vec<_> = s.trim().rsplit(',').collect();
         let group: Vec<usize> = v.iter().map(|n| n.parse::<usize>().unwrap()).collect();
@@ -431,6 +437,7 @@ pub fn get_threshold(
     infrv_quant: f64,
     seed: u64,
     file_list: &FileList,
+    red_quant: f64,
 ) -> f64 {
     println!("Calculating threshold");
     let gibbs_mat_sum = gibbs_mat.sum_axis(Axis(1));
@@ -454,6 +461,7 @@ pub fn get_threshold(
     // let infrv_array = variance(&gibbs_mat, Axis(1));
     let mut converged = false;
     let starting_num_samples = (gibbs_nz.len() as f64) * 1.;
+    // let starting_num_samples = 1000 as f64;
     println!("\n\nstarting samp : {}\n\n", starting_num_samples);
 
     let mut starting_num_samples = starting_num_samples as usize;
@@ -463,6 +471,7 @@ pub fn get_threshold(
 
     // let mut rng = thread_rng();
     let mut rng = Pcg64::seed_from_u64(seed);
+    let std_norm = Normal::new(0.0, 1.0).unwrap();
     while !converged {
         //starting_num_samples < gibbs_nz.len(){
         let die_range = Uniform::new(0, gibbs_nz.len());
@@ -502,25 +511,29 @@ pub fn get_threshold(
                 print!("dice roll: {}\r", dice_iter);
             }
         }
-        // calculate threhold
+        // calculate threshold
+        // z=(x-mu)/sigma, => x = mu + z*sigma
+        // We assume reduction in inferential relative variance follows a normal distribution
+        // x = mu + mad*1.48*quant_norm(q),
+        // since sd = mad*1.48, (a more robust estimator of sd for normal distribution),
+        // similarly, zscore can be obtained by using the inverse cumulative distribution on the quantile
         sampled_infrv.sort();
         let mean = mean_sum / (dice_iter as f64);
         let shifted_samples: Vec<f64> = sampled_infrv
             .iter()
             .map(|s| s.to_f64().unwrap() - mean)
             .collect();
-        let shifted_samples_pos: Vec<f64> = shifted_samples
-            .iter()
-            .map(|s| s.to_f64().unwrap() - mean)
-            .collect();
-
-        let mid = shifted_samples_pos.len() / 2;
-        let median = shifted_samples_pos[mid];
+        /*        let shifted_samples_pos: Vec<f64> = shifted_samples
+        .iter()
+        .map(|s| s.to_f64().unwrap() - mean)
+        .collect(); */
+        let mid = shifted_samples.len() / 2;
+        let mad = shifted_samples[mid];
         //let median = sampled_infrv[sampled_infrv.len()/2].to_f64().unwrap();
-        new_threshold = mean - (median * 1.48 * 1.95);
-        //let sinfrv : Vec<f64> = sampled_infrv.iter().map(|x| x.into_inner()).collect();
-        //new_threshold = rgsl::statistics::quantile_from_sorted_data(&sinfrv, 1, sinfrv.len(), 0.025);
 
+        new_threshold = mean + (mad.abs() * 1.48 * std_norm.inverse_cdf(red_quant / 100.0));
+
+        // let sinfrv : Vec<f64> = sampled_infrv.iter().map(|x| x.into_inner()).collect();
         if ((new_threshold - old_threshold) / new_threshold) < 0.001 {
             //- new_threshold).abs() < 1e-3{
             converged = true;
@@ -796,7 +809,7 @@ pub fn eq_experiment_to_graph(
     let mut golden_collapses = 0;
     let mut t_golden_collapses = 0;
 
-    for (_, p) in part_vec.iter().enumerate() {
+    for p in part_vec.iter() {
         if p.len() > 1 {
             //println!("{:?}", p);
             if valid_transcripts[p[0]] {
@@ -1004,7 +1017,7 @@ pub fn eq_experiment_to_graph(
                     let e = og.find_edge(va, vb);
                     match e {
                         Some(ei) => {
-                            let mut ew = og.edge_weight_mut(ei).unwrap();
+                            let ew = og.edge_weight_mut(ei).unwrap();
                             ew.count += eq_count;
                             ew.eqlist.push(i);
                         }
@@ -1373,7 +1386,7 @@ pub fn work_on_component(
 
                     let xn = pg::graph::NodeIndex::new(*x);
                     let u_to_x_inner = og.find_edge(source_node, xn).unwrap();
-                    let mut u_to_x_info_inner = og.edge_weight_mut(u_to_x_inner).unwrap();
+                    let u_to_x_info_inner = og.edge_weight_mut(u_to_x_inner).unwrap();
                     let curr_state = u_to_x_info_inner.state;
 
                     let delta = match mean_inf {
@@ -1505,7 +1518,7 @@ pub fn work_on_component(
                         v_to_x_eq = v_to_x_info.eqlist.clone();
                     }
 
-                    let mut u_to_x_info = og.edge_weight_mut(u_to_x_inner).unwrap();
+                    let u_to_x_info = og.edge_weight_mut(u_to_x_inner).unwrap();
 
                     // v_to_x_eq.sort();
                     let intersecting_eqlist = intersect(&v_to_x_eq, &u_to_x_info.eqlist);

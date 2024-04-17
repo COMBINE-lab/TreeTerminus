@@ -92,6 +92,12 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         .parse::<f64>()
         .expect("could not parse inf percentile");
 
+    let red_quant = sub_m
+        .value_of("red_quant")
+        .unwrap()
+        .parse::<f64>()
+        .expect("could not parse reduction in inferential variance");
+
     let mut dir_paths: Vec<String> = Vec::new();
     if mean_inf {
         let sd = read_dir(dname.clone());
@@ -349,18 +355,17 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
     let thr = match thr_bool {
         true => {
             if !mean_inf {
-                util::get_threshold(&gibbs_array, p, seed, &file_list_out)
+                util::get_threshold(&gibbs_array, p, seed, &file_list_out, red_quant)
             } else {
                 let mut thresh = 0.0;
                 for gb in gibbs_array_vec.iter() {
-                    thresh += util::get_threshold(gb, p, seed, &file_list_out);
+                    thresh += util::get_threshold(gb, p, seed, &file_list_out, red_quant);
                 }
                 thresh / (gibbs_array_vec.len() as f64)
             }
         }
         false => 1e7,
     };
-
     println!("threshold: {}", thr);
     println!("{}", eq_class.ntarget);
 
@@ -461,6 +466,7 @@ fn do_group(sub_m: &ArgMatches) -> Result<bool, io::Error> {
         "allele_mode":asemode,
         "txp_mode":txpmode,
         "inf_perc":inf_perc,
+        "red_quant":red_quant,
         "p":p,
         "thr":thr,
         "ntxps":eq_class.ntarget,
@@ -540,10 +546,10 @@ fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
             //let node_vec = group_bipart.entry(node.id.clone()).or_insert(Vec::<String>::new());
             let dir_group_key = dir_bipart_counter
                 .entry(req_group.clone())
-                .or_insert_with(HashMap::new);
+                .or_default();
             let overall_group_key = bipart_counter
                 .entry(req_group.clone())
-                .or_insert_with(HashMap::new);
+                .or_default();
 
             //binary_tree::compute_bipart_count(node, &mut bipart_counter, &mut dir_bipart_counter, &node_set, node_vec);
             group_keys.push(req_group.clone());
@@ -585,7 +591,7 @@ fn do_collapse(sub_m: &ArgMatches) -> Result<bool, io::Error> {
 fn main() -> io::Result<()> {
     let matches = App::new("TreeTerminus")
 	.setting(AppSettings::ArgRequiredElseHelp)
-        .version("0.1.0")
+        .version("0.3.0")
         .author("Singh et al.")
         // .about("Data-driven grouping of transcripts to reduce inferential uncertainty")
         .subcommand(
@@ -667,6 +673,13 @@ fn main() -> io::Result<()> {
                 .takes_value(true)
                 .default_value("0")
                 .help("inferential variance percentile threshold that determines whether a transcript will be considered for grouping")
+            )
+            .arg(
+                Arg::with_name("red_quant")
+                .long("red_quant")
+                .takes_value(true)
+                .default_value("2.5")
+                .help("Reduction in inferential variance percentile threshold that determines to detemine if transcripts should be grouped")
             )
         )
         .subcommand(

@@ -162,7 +162,7 @@ impl<'a> Iterator for IterEqList<'a> {
         }
         self.pos += 1;
         let p = self.inner.offsets[i];
-        let l = self.inner.offsets[(i + 1)] - p;
+        let l = self.inner.offsets[i + 1] - p;
         Some((
             &self.inner.labels[p..(p + l)],
             &self.inner.weights[p..(p + l)],

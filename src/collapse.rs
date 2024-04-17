@@ -24,7 +24,7 @@ fn create_union_find(g: &[String], ntxps: usize) -> UnionFind<usize> {
     let mut unionfind_struct = UnionFind::new(ntxps);
     let mut visited: Vec<i32> = vec![-1; ntxps];
     let mut count = 0;
-    for (_i, group) in g.iter().enumerate() {
+    for group in g.iter() {
         let g_set: Vec<usize> = group
             .clone()
             .split('_')
@@ -56,7 +56,7 @@ fn get_merged_bparts(
 ) -> HashMap<String, HashMap<String, u32>> {
     let all_groups: Vec<String> = all_groups_bpart.keys().cloned().collect();
     let mut merged_bparts: HashMap<String, HashMap<String, u32>> = HashMap::new();
-    for (_j, old_g) in all_groups.iter().enumerate() {
+    for old_g in all_groups.iter() {
         let f_txp = old_g
             .clone()
             .split('_')
@@ -67,7 +67,7 @@ fn get_merged_bparts(
         let m_group = strings.join("_").to_string();
         let m_bpart_key = merged_bparts
             .entry(sort_group_id(&m_group.clone()))
-            .or_insert_with(HashMap::new);
+            .or_default();
 
         for (b_part, count) in all_groups_bpart.get(&old_g.clone()).unwrap().iter() {
             let c_count = m_bpart_key.entry(b_part.clone()).or_insert(0);
@@ -97,7 +97,7 @@ fn find_groups_in_merged(
         let m_group = strings.join("_").to_string();
         merged_groups
             .entry(m_group)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(all_groups[j].clone());
     }
     merged_groups
@@ -145,7 +145,7 @@ fn get_group_trees(
     for (_i, samp_hash) in samp_group_trees.iter().enumerate() {
         let mut g_vec: Vec<String> = Vec::new();
         let mut s_trees: Vec<String> = Vec::new();
-        for (_j, g) in groups.iter().enumerate() {
+        for g in groups.iter() {
             if samp_hash.contains_key(g) {
                 g_vec.push(g.clone());
                 //println!("{}\t{:?}",g, samp_group_trees[_i].get(g).unwrap().traverse_tree());
@@ -268,7 +268,7 @@ pub fn use_phylip(dir_paths: &[&str], out: &String, all_groups: &[String], ntxps
     let mut samp_group_trees: Vec<HashMap<String, TreeNode>> = Vec::new(); //Vector containing group trees from each sample
     let mut msamp_nwk_file: Vec<File> = Vec::new(); //Vector containing newick trees corresponding to each group
                                                     // Storing group trees in each sample in an array along with ....
-    for (_i, dname) in dir_paths.iter().enumerate() {
+    for dname in dir_paths.iter() {
         let compo: Vec<&str> = dname.rsplit('/').collect();
         let experiment_name = compo[0];
         let mut prefix_path = out.clone();
