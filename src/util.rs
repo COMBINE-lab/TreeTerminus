@@ -531,7 +531,7 @@ pub fn get_threshold(
         let mad = shifted_samples[mid];
         //let median = sampled_infrv[sampled_infrv.len()/2].to_f64().unwrap();
 
-        new_threshold = mean + (mad.abs() * 1.48 * std_norm.inverse_cdf(red_quant / 100.0));
+        new_threshold = mean + (mad.abs() * 1.48 * std_norm.inverse_cdf(red_quant));
 
         // let sinfrv : Vec<f64> = sampled_infrv.iter().map(|x| x.into_inner()).collect();
         if ((new_threshold - old_threshold) / new_threshold) < 0.001 {

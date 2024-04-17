@@ -672,14 +672,14 @@ fn main() -> io::Result<()> {
                 .short("i")
                 .takes_value(true)
                 .default_value("0")
-                .help("inferential variance percentile threshold that determines whether a transcript will be considered for grouping")
+                .help("inferential variance percentile threshold that determines whether a transcript will be considered for grouping [0-1]")
             )
             .arg(
                 Arg::with_name("red_quant")
                 .long("red_quant")
                 .takes_value(true)
-                .default_value("2.5")
-                .help("Reduction in inferential variance percentile threshold that determines to detemine if transcripts should be grouped")
+                .default_value("0.025")
+                .help("Reduction in inferential variance percentile threshold that determines to detemine if transcripts/groups should be aggregated [0,1]")
             )
         )
         .subcommand(
